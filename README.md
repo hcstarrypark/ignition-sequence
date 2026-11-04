@@ -1,5 +1,7 @@
 # Ignition Sequence · 발사 시뮬레이터
 
+**▶ 바로 플레이: https://hcstarrypark.github.io/ignition-sequence/**
+
 브라우저에서 바로 실행되는 3D 로켓 발사 시뮬레이터입니다. 플로리다 케네디 우주센터 39A 발사장에서 로켓을 쏘아 올려 위성을 궤도에 올리거나, 유인 우주선으로 달에 착륙한 뒤 지구로 귀환합니다.
 
 `index.html` 파일 하나로 동작하며 별도 빌드가 필요 없습니다. 브라우저로 열기만 하면 됩니다. (three.js와 웹 폰트는 CDN에서 불러옵니다.)
