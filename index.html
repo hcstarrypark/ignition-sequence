@@ -1,0 +1,3045 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ignition Sequence</title>
+<style>
+  :root{
+    --bg:#070b12;
+    --panel:#0d1420;
+    --panel-2:#111a28;
+    --border:#223047;
+    --ink:#e7edf5;
+    --muted:#7c8ba3;
+    --accent:#ff5a2e;
+    --accent-dim:#a83f22;
+    --cyan:#4fd1ff;
+    --warn:#ffc857;
+    --danger:#ff4d4d;
+    --good:#3ddc97;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'IBM Plex Sans', system-ui, sans-serif;
+    overflow:hidden;
+    height:100vh;
+    width:100%;
+    -webkit-font-smoothing:antialiased;
+  }
+  #stage{position:fixed;inset:0;}
+  canvas{display:block;width:100%;height:100%;}
+  button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;}
+
+  .mono{font-family:'JetBrains Mono','IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
+  .disp{font-family:'Big Shoulders Display','Oswald',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:0.03em;}
+
+  #hud{position:fixed;inset:0;pointer-events:none;padding:18px;display:flex;flex-direction:column;justify-content:space-between;height:100%;}
+
+  .row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
+
+  .panel{
+    background:linear-gradient(180deg,var(--panel-2),var(--panel));
+    border:1px solid var(--border);
+  }
+
+  /* Right column — mission clock, then mission mode + checklist */
+  #rightcol{position:fixed;top:18px;right:18px;display:flex;flex-direction:column;gap:10px;width:218px;pointer-events:auto;max-height:calc(100vh - 150px);overflow-y:auto;scrollbar-width:thin;}
+  #clockcard{border-radius:6px;padding:8px 18px;text-align:right;}
+  #clocklabel{font-size:11px;letter-spacing:.16em;color:var(--muted);}
+  #clockval{font-size:28px;color:var(--cyan);text-shadow:0 0 14px rgba(79,209,255,.35);}
+  #missionname{font-size:11px;color:var(--muted);letter-spacing:.06em;margin-top:2px;}
+
+  #modecard{border-radius:6px;padding:10px 12px 12px;}
+  .mode-label{font-size:10px;letter-spacing:.16em;color:var(--muted);margin-bottom:6px;}
+  .mode-seg{display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden;}
+  .mode-btn{flex:1;font:600 12px 'IBM Plex Sans',system-ui,sans-serif;padding:7px 4px;background:#0a121c;color:var(--muted);border:none;cursor:pointer;}
+  .mode-btn + .mode-btn{border-left:1px solid var(--border);}
+  .mode-btn.active{background:var(--cyan);color:#001a24;}
+  .mode-btn:disabled{cursor:not-allowed;}
+  .mode-btn:disabled:not(.active){opacity:.4;}
+  .design-label{margin-top:12px;}
+  .design-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;}
+  .design-btn{font:600 12px 'IBM Plex Sans',system-ui,sans-serif;padding:6px 4px;background:#0a121c;color:var(--muted);border:1px solid var(--border);border-radius:4px;cursor:pointer;}
+  .design-featured{grid-column:1/-1;}
+  .design-featured span{font:500 10px 'JetBrains Mono',monospace;color:var(--muted);margin-left:4px;letter-spacing:.04em;}
+  .design-btn:hover:not(:disabled){color:var(--ink);border-color:#3a4f6e;}
+  .design-btn.active{border-color:var(--cyan);color:var(--ink);background:#0f2230;}
+  .design-btn:disabled{cursor:not-allowed;}
+  .design-btn:disabled:not(.active){opacity:.4;}
+  #design-spec{margin:6px 0 0;font-size:10.5px;line-height:1.45;color:var(--muted);}
+  #design-spec b{color:var(--ink);font-weight:500;}
+  #mission-steps{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:11px;}
+  #mission-steps li{display:flex;gap:8px;align-items:baseline;color:var(--muted);}
+  #mission-steps li .n{width:12px;flex:none;text-align:right;color:#46556c;}
+  #mission-steps li.done{color:var(--good);}
+  #mission-steps li.done .n{color:var(--good);}
+  #mission-steps li.current{color:var(--ink);}
+  #mission-steps li.current .n{color:var(--warn);}
+  #mission-steps li.fail{color:var(--danger);}
+  #mission-steps li.fail .n{color:var(--danger);}
+  .voice-row{margin-top:12px;padding-top:10px;border-top:1px solid var(--border);}
+  #voice-select{width:100%;font:500 12px 'IBM Plex Sans',system-ui,sans-serif;color:var(--ink);background:#0a121c;border:1px solid var(--border);border-radius:4px;padding:5px 6px;}
+  #voice-note{margin:7px 0 0;font-size:10.5px;line-height:1.45;color:var(--muted);}
+  #voice-note b{color:var(--ink);font-weight:600;}
+  #voice-select:focus-visible{outline:2px solid var(--cyan);outline-offset:1px;}
+  .sfx-btn{width:100%;margin-top:6px;}
+
+  /* Telemetry */
+  #telemetry{
+    border-radius:8px;
+    padding:14px 16px;
+    width:230px;
+    pointer-events:auto;
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  #telemetry.gust{border-color:var(--warn); box-shadow:0 0 14px rgba(255,200,87,.25);}
+  .tele-title{font-size:11px;letter-spacing:.16em;color:var(--muted);margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:8px;}
+  .tele-item{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
+  .tele-k{font-size:11px;color:var(--muted);letter-spacing:.05em;}
+  .tele-v{font-size:17px;color:var(--ink);}
+  .tele-v.accent{color:var(--cyan);}
+  .tele-small{font-size:14px;}
+  .tele-unit{font-size:10px;color:var(--muted);margin-left:3px;}
+
+  .bar-track{height:6px;background:#050810;border:1px solid var(--border);border-radius:3px;overflow:hidden;margin-top:4px;}
+  .bar-fill{height:100%;border-radius:3px;transition:width .12s linear;}
+
+  #status-tag{
+    display:inline-block;font-size:11px;letter-spacing:.1em;padding:3px 9px;border-radius:3px;
+    border:1px solid var(--border); color:var(--muted); margin-top:2px;
+  }
+  #status-tag.go{color:var(--good);border-color:var(--good);}
+  #status-tag.warn{color:var(--warn);border-color:var(--warn);}
+  #status-tag.bad{color:var(--danger);border-color:var(--danger);}
+  #warp{font-size:11px;color:var(--warn);margin-top:6px;letter-spacing:.06em;}
+
+  /* Bottom console */
+  #console{display:flex;justify-content:center;pointer-events:auto;}
+  #consolecard{
+    border-radius:10px;
+    padding:14px 20px;
+    display:flex;
+    align-items:center;
+    gap:22px;
+  }
+  .ctrl-group{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:90px;}
+  .ctrl-label{font-size:10px;color:var(--muted);letter-spacing:.14em;white-space:nowrap;}
+  .ctrl-val{font-size:18px;color:var(--ink);}
+
+  #throttle-wrap{width:110px;}
+  #throttle-bar{height:10px;background:#050810;border:1px solid var(--border);border-radius:5px;overflow:hidden;}
+  #throttle-fill{height:100%;background:linear-gradient(90deg,var(--accent-dim),var(--accent));}
+
+  #gimbal-wrap{width:90px;height:22px;position:relative;border:1px solid var(--border);border-radius:5px;background:#050810;}
+  #gimbal-marker{position:absolute;top:2px;width:3px;height:16px;background:var(--cyan);border-radius:2px;box-shadow:0 0 8px rgba(79,209,255,.6);}
+  #gimbal-marker.bad{background:var(--danger);box-shadow:0 0 8px rgba(255,77,77,.7);}
+  #gimbal-mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border);}
+
+  button.action{
+    font-family:'Big Shoulders Display','Oswald',sans-serif;
+    font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    font-size:16px;padding:12px 22px;border-radius:6px;border:1px solid var(--border);
+    background:#0a121c;color:var(--ink);cursor:pointer;transition:all .12s ease;white-space:nowrap;
+  }
+  button.action:hover{border-color:var(--accent);color:var(--accent);}
+  button.action:active{transform:translateY(1px);}
+  button.action.primary{background:var(--accent);border-color:var(--accent);color:#1a0800;}
+  button.action.primary:hover{background:#ff7a4d;color:#1a0800;}
+  button.action.primary:disabled{background:#2a2018;border-color:var(--border);color:var(--muted);cursor:not-allowed;}
+  button.action.stage{background:var(--cyan);border-color:var(--cyan);color:#001a24;}
+  button.action.stage:hover{background:#7fe0ff;}
+  button.action.stage:disabled{background:#182430;border-color:var(--border);color:var(--muted);cursor:not-allowed;}
+  button.action.meco{background:var(--warn);border-color:var(--warn);color:#2a1c00;}
+  button.action.meco:hover{background:#ffd680;}
+  button.action.meco:disabled{background:#2a2418;border-color:var(--border);color:var(--muted);cursor:not-allowed;}
+  button.action.retro{background:#0a121c;border-color:var(--cyan);color:var(--cyan);}
+  button.action.retro:hover{background:#0f2230;color:#7fe0ff;}
+  button.action.retro.on{background:var(--cyan);color:#001a24;box-shadow:0 0 14px rgba(79,209,255,.45);}
+  button.action.retro:disabled{background:#0a121c;border-color:var(--border);color:var(--muted);box-shadow:none;cursor:not-allowed;}
+  button.action.deploy{background:#d4af53;border-color:#d4af53;color:#241a02;min-width:128px;}
+  button.action.deploy:hover{background:#e8c874;}
+  button.action.deploy:disabled{background:#2a2418;border-color:var(--border);color:var(--muted);cursor:not-allowed;}
+
+  #hint{font-size:11px;color:var(--muted);text-align:center;margin-top:8px;letter-spacing:.02em;}
+  #hintwrap{display:flex;justify-content:center;pointer-events:none;}
+  kbd{
+    font-family:'JetBrains Mono',monospace;background:#0a121c;border:1px solid var(--border);
+    border-radius:3px;padding:1px 5px;color:var(--ink);font-size:10px;
+  }
+
+  /* Center messages */
+  #centermsg{
+    position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);
+    text-align:center;pointer-events:none;opacity:0;transition:opacity .4s ease;
+    width:min(90vw,760px);
+  }
+  #centermsg.show{opacity:1;}
+  #centermsg .big{font-size:56px;line-height:1.05;text-shadow:0 0 30px currentColor;text-wrap:balance;}
+  #centermsg .sub{font-size:14px;color:var(--muted);letter-spacing:.1em;margin-top:8px;text-wrap:balance;}
+  #centermsg.good .big{color:var(--good);}
+  #centermsg.bad .big{color:var(--danger);}
+  #centermsg.info .big{color:var(--cyan);}
+
+  #title-block{position:fixed;left:18px;bottom:18px;pointer-events:none;opacity:.85;}
+  #title-block .t{font-size:13px;letter-spacing:.14em;color:var(--muted);}
+  #title-block .n{font-size:20px;color:var(--ink);}
+
+  @media (max-width:820px){
+    #telemetry{width:150px;padding:10px 12px;}
+    .tele-v{font-size:14px;}
+    #rightcol{width:180px;}
+    #consolecard{gap:10px;padding:10px 12px;flex-wrap:wrap;justify-content:center;}
+    .ctrl-group{min-width:64px;}
+    button.action{font-size:12px;padding:9px 12px;}
+    button.action.deploy{min-width:0;}
+    #title-block{display:none;}
+    #clockval{font-size:22px;}
+    #centermsg .big{font-size:36px;}
+  }
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+</head>
+<body>
+<div id="stage"></div>
+
+<div id="hud">
+  <div class="row">
+    <div id="telemetry" class="panel">
+      <div class="tele-title mono" id="tele-title">텔레메트리 &middot; 발사체</div>
+      <div class="tele-item"><span class="tele-k">고도</span><span class="tele-v accent mono" id="v-alt">0<span class="tele-unit">m</span></span></div>
+      <div class="tele-item"><span class="tele-k">속도</span><span class="tele-v accent mono" id="v-vel">0<span class="tele-unit">m/s</span></span></div>
+      <div class="tele-item"><span class="tele-k" id="apo-label">정점 고도</span><span class="tele-v mono" id="v-apo">&mdash;<span class="tele-unit">m</span></span></div>
+      <div class="tele-item"><span class="tele-k">이동 거리</span><span class="tele-v mono" id="v-range">0<span class="tele-unit">m</span></span></div>
+      <div class="tele-item"><span class="tele-k">마하 · 동압</span><span class="tele-v mono tele-small" id="v-mq">0.00</span></div>
+      <div class="tele-item"><span class="tele-k">중력가속도</span><span class="tele-v mono" id="v-g">0.0<span class="tele-unit">g</span></span></div>
+      <div class="tele-item"><span class="tele-k" id="wind-label">측풍</span><span class="tele-v mono" id="v-wind">0.0<span class="tele-unit">m/s</span></span></div>
+      <div style="margin-top:6px;">
+        <div class="tele-item" style="margin-bottom:4px;"><span class="tele-k" id="v-fuel-label">연료 &mdash; 1단</span><span class="tele-v mono" id="v-fuel">100<span class="tele-unit">%</span></span></div>
+        <div class="bar-track"><div class="bar-fill" id="fuel-fill" style="width:100%;background:linear-gradient(90deg,#2a7,var(--good));"></div></div>
+      </div>
+      <div style="margin-top:10px;">
+        <div class="tele-k">상태</div>
+        <div id="status-tag">대기 중</div>
+        <div id="warp" class="mono" hidden>시간 가속 &times;4</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="centermsg"><div class="big disp" id="centermsg-big"></div><div class="sub mono" id="centermsg-sub"></div></div>
+
+  <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+    <div id="console">
+      <div id="consolecard" class="panel">
+        <div class="ctrl-group">
+          <div class="ctrl-label mono">추력</div>
+          <div id="throttle-wrap"><div id="throttle-bar"><div id="throttle-fill" style="width:0%;"></div></div></div>
+          <div class="ctrl-val mono" id="throttle-val">0%</div>
+        </div>
+        <div class="ctrl-group">
+          <div class="ctrl-label mono" id="att-label">자세 제어(RCS)</div>
+          <div id="gimbal-wrap"><div id="gimbal-mid"></div><div id="gimbal-marker" style="left:50%;"></div></div>
+          <div class="ctrl-val mono" id="gimbal-val">0&#176;</div>
+        </div>
+        <button class="action primary" id="btn-launch">점화</button>
+        <button class="action stage" id="btn-stage" disabled>단 분리</button>
+        <button class="action meco" id="btn-meco" disabled>엔진 정지</button>
+        <button class="action retro" id="btn-retro" disabled aria-pressed="false">역추진 자세</button>
+        <button class="action deploy" id="btn-deploy" disabled>위성 분리</button>
+        <button class="action" id="btn-reset">리셋</button>
+      </div>
+    </div>
+    <div id="hintwrap">
+      <div id="hint" class="mono">
+        <kbd>W</kbd>/<kbd>S</kbd> 추력 &nbsp; <kbd>A</kbd>/<kbd>D</kbd> 자세 &nbsp; <kbd>SCROLL</kbd> 확대/축소 &nbsp; <kbd>SPACE</kbd> 점화 &nbsp; <kbd>X</kbd> 단 분리 &nbsp; <kbd>C</kbd> 엔진 정지/재점화 &nbsp; <kbd>B</kbd> 역추진 자세 &nbsp; <kbd>V</kbd> <span id="hint-v">위성 분리</span> &nbsp; <kbd>R</kbd> 리셋
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="rightcol">
+  <div id="clockcard" class="panel">
+    <div id="clocklabel" class="mono">임무 시계</div>
+    <div id="clockval" class="mono">T&#8211; 00:10.0</div>
+    <div id="missionname">스타웰-1 &middot; 위성 배치 임무</div>
+  </div>
+  <div id="modecard" class="panel">
+    <div class="mode-label mono">임무 모드</div>
+    <div class="mode-seg" role="group" aria-label="임무 모드">
+      <button class="mode-btn active" id="btn-mode-un" aria-pressed="true">무인 &middot; 위성</button>
+      <button class="mode-btn" id="btn-mode-man" aria-pressed="false">유인 &middot; 달 착륙</button>
+    </div>
+    <div class="mode-label mono design-label">기체 디자인</div>
+    <div class="design-grid" role="group" aria-label="기체 디자인">
+      <button class="design-btn design-featured" data-design="nuri" aria-pressed="false">누리호 <span>KSLV-II</span></button>
+      <button class="design-btn" data-design="starwell" aria-pressed="false">스타웰</button>
+      <button class="design-btn" data-design="saturn" aria-pressed="false">새턴 V</button>
+      <button class="design-btn" data-design="heavy" aria-pressed="false">헤비</button>
+      <button class="design-btn" data-design="soyuz" aria-pressed="false">소유즈</button>
+    </div>
+    <p id="design-spec" class="mono"></p>
+    <ol id="mission-steps" class="mono"></ol>
+    <div class="voice-row">
+      <label class="mode-label mono" for="voice-select">관제 음성</label>
+      <select id="voice-select"></select>
+      <button id="sfx-toggle" class="design-btn sfx-btn" aria-pressed="true">엔진 효과음 켜짐</button>
+      <div class="mode-label mono design-label">화질</div>
+      <div class="mode-seg" role="group" aria-label="화질">
+        <button class="mode-btn" id="btn-q-4k" aria-pressed="true">4K · 그림자</button>
+        <button class="mode-btn" id="btn-q-std" aria-pressed="false">표준</button>
+      </div>
+      <p id="voice-note" hidden>남성 내레이터 음성은 macOS 설정 &rsaquo; 손쉬운 사용 &rsaquo; 음성 콘텐츠에서 <b>Evan</b>이나 <b>Nathan</b>(영어·미국)을 받으면 자동으로 쓰여요. Edge 브라우저는 기본 제공.</p>
+    </div>
+  </div>
+</div>
+
+<div id="title-block">
+  <div class="t mono">점화 시퀀스</div>
+  <div class="n disp">발사 시뮬레이터</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ---------- THREE SETUP ---------- */
+const stageEl = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({antialias:true, logarithmicDepthBuffer:true, powerPreference:'high-performance'});
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// quality: '4k' renders the drawing buffer at 3840 px across (or the screen's native density if higher),
+// plus 4096 px shadows; 'std' is the lighter fallback for slower machines
+const QUALITY_KEY = 'ignition.quality';
+let quality = '4k';
+try{ quality = localStorage.getItem(QUALITY_KEY) || '4k'; }catch(e){}
+function applyQuality(){
+  const dpr = window.devicePixelRatio || 1;
+  const ratio = quality==='4k' ? Math.min(4, Math.max(dpr, 3840/window.innerWidth)) : Math.min(dpr, 1.5);
+  renderer.setPixelRatio(ratio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = quality==='4k';
+}
+applyQuality();
+stageEl.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+// sky palette by altitude: [zenith, horizon] at sea level, 30 km, 100 km
+const SKY_TOP = [new THREE.Color('#3b82c4'), new THREE.Color('#0b1a33'), new THREE.Color('#020308')];
+const SKY_HOR = [new THREE.Color('#bcdcee'), new THREE.Color('#4a7fae'), new THREE.Color('#1d3b63')];
+const SKY_MOON = new THREE.Color('#020307');
+const FOG_BASE = 0.00028;
+scene.background = SKY_HOR[0].clone();
+scene.fog = new THREE.FogExp2(SKY_HOR[0].getHex(), FOG_BASE);
+
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth/window.innerHeight, 0.1, 1200000);
+
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  applyQuality();
+});
+
+/* Lights */
+const sun = new THREE.DirectionalLight(0xfff4e6, 0.8);
+sun.position.set(300, 500, -200);
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.05);
+const KEY_DIR = new THREE.Vector3(-350, 420, 600).normalize();
+keyLight.position.copy(KEY_DIR).multiplyScalar(600);
+// the shadow camera rides with the vessel: a tight box keeps 4096 px of shadow detail on the pad and rocket
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(4096, 4096);
+keyLight.shadow.camera.left = -90; keyLight.shadow.camera.right = 90;
+keyLight.shadow.camera.top = 90; keyLight.shadow.camera.bottom = -90;
+keyLight.shadow.camera.near = 10; keyLight.shadow.camera.far = 1400;
+keyLight.shadow.bias = -0.0004;
+keyLight.shadow.normalBias = 0.04;
+scene.add(keyLight);
+scene.add(keyLight.target);
+function shadowify(obj, cast, receive){
+  obj.traverse(o=>{ if(o.isMesh){ o.castShadow = cast; o.receiveShadow = receive; } });
+}
+const skyFill = new THREE.HemisphereLight(0xcfe3f5, 0x4c5a3e, 0.55);
+scene.add(skyFill);
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0x3a4658, 0.35));
+
+/* Sky dome — zenith→horizon gradient with a sun glow, recoloured by altitude, rides with the camera */
+const skyUniforms = {
+  topColor:{value:SKY_TOP[0].clone()},
+  horizonColor:{value:SKY_HOR[0].clone()},
+  groundColor:{value:new THREE.Color('#7f98aa')},
+  sunDir:{value:new THREE.Vector3(300,500,-200).normalize()},
+  sunGlow:{value:1.0},
+};
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(800000, 40, 20), new THREE.ShaderMaterial({
+  uniforms:skyUniforms, side:THREE.BackSide, depthWrite:false, depthTest:false,
+  vertexShader:'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader:[
+    'uniform vec3 topColor; uniform vec3 horizonColor; uniform vec3 groundColor; uniform vec3 sunDir; uniform float sunGlow;',
+    'varying vec3 vDir;',
+    'void main(){',
+    '  vec3 d = normalize(vDir); float h = d.y;',
+    '  vec3 col = h > 0.0 ? mix(horizonColor, topColor, pow(smoothstep(0.0, 0.6, h), 0.7)) : mix(horizonColor, groundColor, smoothstep(0.0, -0.2, h));',
+    '  float s = max(dot(d, normalize(sunDir)), 0.0);',
+    '  col += sunGlow * (vec3(1.0,0.95,0.85)*pow(s, 1200.0)*2.0 + vec3(1.0,0.86,0.62)*pow(s, 16.0)*0.25);',
+    '  gl_FragColor = vec4(col, 1.0);',
+    '}'].join('\n'),
+}));
+skyDome.renderOrder = -10;
+scene.add(skyDome);
+
+/* Ground — procedural terrain textures that tile every 500 m; the plane is snapped under the vessel in 500 m steps */
+function wrappedRect(ctx, x, y, w, h, S){
+  for(const ox of [-S,0,S]) for(const oy of [-S,0,S]) ctx.fillRect(x+ox, y+oy, w, h);
+}
+function finishTexture(c){
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(800,800);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return tex;
+}
+function makeEarthGroundTexture(){
+  // Space Coast ground cover: sawgrass marsh, palmetto scrub, sandy openings, small ponds and service roads
+  const S = 2048, c = document.createElement('canvas'); c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#69714a'; ctx.fillRect(0,0,S,S);
+  const cover = ['#7b7d4e','#56653d','#4d5e3f','#727a50','#8a8558','#5f6c43'];
+  for(let i=0;i<220;i++){
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = cover[i%cover.length];
+    const w = 90+Math.random()*420, h = 60+Math.random()*300;
+    for(const ox of [-S,0,S]) for(const oy of [-S,0,S]){
+      ctx.beginPath();
+      ctx.ellipse(Math.random()*S+ox, Math.random()*S+oy, w/2, h/2, Math.random()*Math.PI, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 0.55; ctx.fillStyle = '#b8ab82';               // sandy openings
+  for(let i=0;i<40;i++){ ctx.beginPath(); ctx.ellipse(Math.random()*S, Math.random()*S, 20+Math.random()*60, 12+Math.random()*40, Math.random()*3, 0, Math.PI*2); ctx.fill(); }
+  ctx.globalAlpha = 0.9; ctx.fillStyle = '#2f4a4c';                // ponds and wet swales
+  for(let i=0;i<26;i++){ ctx.beginPath(); ctx.ellipse(80+Math.random()*(S-160), 80+Math.random()*(S-160), 10+Math.random()*45, 6+Math.random()*28, Math.random()*3, 0, Math.PI*2); ctx.fill(); }
+  ctx.globalAlpha = 1;
+  for(let i=0;i<60000;i++){
+    ctx.fillStyle = Math.random()<0.55 ? 'rgba(30,44,24,0.33)' : 'rgba(150,150,104,0.2)';
+    const r = 1+Math.random()*3;
+    ctx.fillRect(Math.random()*S, Math.random()*S, r, r);
+  }
+  ctx.strokeStyle = 'rgba(176,170,152,0.75)'; ctx.lineWidth = 7;  // service roads
+  ctx.beginPath(); ctx.moveTo(0,1290); ctx.lineTo(S,1290); ctx.moveTo(610,0); ctx.lineTo(610,S); ctx.stroke();
+  ctx.strokeStyle = 'rgba(176,170,152,0.4)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(1530,0); ctx.lineTo(1530,S); ctx.stroke();
+  return finishTexture(c);
+}
+function makeMoonGroundTexture(){
+  const S = 1024, c = document.createElement('canvas'); c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#7b7a77'; ctx.fillRect(0,0,S,S);
+  for(let i=0;i<40;i++){
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = Math.random()<0.5 ? '#6c6b68' : '#8a8986';
+    wrappedRect(ctx, Math.random()*S, Math.random()*S, 120+Math.random()*300, 120+Math.random()*300, S);
+  }
+  ctx.globalAlpha = 1;
+  for(let i=0;i<22000;i++){
+    ctx.fillStyle = Math.random()<0.5 ? 'rgba(50,50,48,0.3)' : 'rgba(170,170,165,0.25)';
+    const r = 1+Math.random()*2;
+    ctx.fillRect(Math.random()*S, Math.random()*S, r, r);
+  }
+  for(let i=0;i<60;i++){
+    const x = Math.random()*S, y = Math.random()*S, r = 4+Math.random()*26;
+    ctx.strokeStyle = 'rgba(165,165,160,0.55)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, r, Math.PI*0.9, Math.PI*1.9); ctx.stroke();
+    ctx.strokeStyle = 'rgba(45,45,43,0.5)';
+    ctx.beginPath(); ctx.arc(x, y, r, Math.PI*1.9, Math.PI*2.9); ctx.stroke();
+  }
+  return finishTexture(c);
+}
+const earthGroundTex = makeEarthGroundTexture();
+const moonGroundTex = makeMoonGroundTexture();
+const GROUND_TILE = 500;
+const groundGeo = new THREE.PlaneGeometry(400000, 400000);
+const groundMat = new THREE.MeshStandardMaterial({map:earthGroundTex, color:0xffffff, roughness:1});
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* Pad — Launch Complex 39A: octagonal hardstand, north-running flame trench, lattice service tower
+   with crew access arm and lightning mast, and the spherical LOX / LH2 tanks on the perimeter */
+const padGroup = new THREE.Group();
+const padBase = new THREE.Mesh(new THREE.CylinderGeometry(14,16,3,32), new THREE.MeshStandardMaterial({color:0x3a3f47, roughness:0.9}));
+padBase.position.y = 1.5;
+padGroup.add(padBase);
+const padRing = new THREE.Mesh(new THREE.RingGeometry(9,10.5,48), new THREE.MeshBasicMaterial({color:0xff5a2e, side:THREE.DoubleSide}));
+padRing.rotation.x = -Math.PI/2; padRing.position.y = 3.05;
+padGroup.add(padRing);
+const apron = new THREE.Mesh(new THREE.CircleGeometry(115, 8), new THREE.MeshStandardMaterial({color:0x7a7d80, roughness:0.95}));
+apron.rotation.x = -Math.PI/2; apron.rotation.z = Math.PI/8; apron.position.y = 0.06;
+padGroup.add(apron);
+const trench = new THREE.Mesh(new THREE.PlaneGeometry(14, 95), new THREE.MeshStandardMaterial({color:0x26292d, roughness:1}));
+trench.rotation.x = -Math.PI/2; trench.position.set(0, 0.08, -55);
+padGroup.add(trench);
+const steel = new THREE.MeshStandardMaterial({color:0x6f7782, roughness:0.6, metalness:0.45});
+const mastMat = new THREE.MeshStandardMaterial({color:0x9aa1a8, metalness:0.5, roughness:0.5});
+{
+  // fixed service structure: four columns, a floor every 9 m, X-bracing on the faces we can see
+  const fx = 21, half = 5.5, H = 82;
+  for(const cx of [-half, half]) for(const cz of [-half, half]){
+    const col = new THREE.Mesh(new THREE.BoxGeometry(0.9, H, 0.9), steel);
+    col.position.set(fx+cx, H/2, cz); padGroup.add(col);
+  }
+  for(let y=9; y<=H; y+=9){
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(half*2+1, 0.6, half*2+1), steel);
+    deck.position.set(fx, y, 0); padGroup.add(deck);
+    padGroup.add(strut(new THREE.Vector3(fx-half, y-9, half), new THREE.Vector3(fx+half, y, half), 0.18, steel));
+    padGroup.add(strut(new THREE.Vector3(fx-half, y-9, -half), new THREE.Vector3(fx-half, y, half), 0.18, steel));
+  }
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(fx-half-2.6, 2.6, 2.4), steel);   // crew access arm
+  arm.position.set((fx-half+2.6)/2, 64, 0); padGroup.add(arm);
+  const whiteRoom = new THREE.Mesh(new THREE.BoxGeometry(3.4, 3.4, 3.4), new THREE.MeshStandardMaterial({color:0xe7eaee, roughness:0.6}));
+  whiteRoom.position.set(4.4, 64, 0); padGroup.add(whiteRoom);
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.7, 26, 8), mastMat);   // lightning mast on top
+  rod.position.set(fx, H+13, 0); padGroup.add(rod);
+}
+const tankWhite = new THREE.MeshStandardMaterial({color:0xf0f2f4, roughness:0.4, metalness:0.2});
+for(const [x, z, r] of [[-78, -62, 10], [82, -70, 8.5]]){
+  const sph = new THREE.Mesh(new THREE.SphereGeometry(r, 40, 24), tankWhite);
+  sph.position.set(x, r+3, z); padGroup.add(sph);
+  for(let i=0;i<4;i++){ const a = i*Math.PI/2+Math.PI/4; padGroup.add(strut(new THREE.Vector3(x+Math.cos(a)*r*0.7, r, z+Math.sin(a)*r*0.7), new THREE.Vector3(x+Math.cos(a)*r*0.9, 0, z+Math.sin(a)*r*0.9), 0.4, steel)); }
+}
+scene.add(padGroup);
+shadowify(padGroup, true, true);
+
+/* Stars — a sky shell that rides with the camera */
+function makeStars(){
+  const N=3500;
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(N*3);
+  for(let i=0;i<N;i++){
+    const r = 8000+Math.random()*40000;
+    const theta = Math.random()*Math.PI*2;
+    const phi = Math.acos(Math.random()*1.6-0.8);
+    pos[i*3] = r*Math.sin(phi)*Math.cos(theta);
+    pos[i*3+1] = Math.abs(r*Math.cos(phi))*0.6+400;
+    pos[i*3+2] = r*Math.sin(phi)*Math.sin(theta);
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const mat = new THREE.PointsMaterial({color:0xffffff, size:22, transparent:true, opacity:0, sizeAttenuation:true, fog:false});
+  return new THREE.Points(geo, mat);
+}
+const stars = makeStars();
+scene.add(stars);
+
+/* Lunar surface dressing — craters near the landing zone, Earth hanging in the black sky */
+const craters = new THREE.Group();
+{
+  const rimMat = new THREE.MeshStandardMaterial({color:0x6a6a6a, roughness:1, side:THREE.DoubleSide});
+  const floorMat = new THREE.MeshStandardMaterial({color:0x5b5b5b, roughness:1, side:THREE.DoubleSide});
+  for(let i=0;i<46;i++){
+    const r = 3+Math.random()*24;
+    const x = (Math.random()*2-1)*900, z = -Math.random()*700+80;
+    const rim = new THREE.Mesh(new THREE.RingGeometry(r*0.78, r, 28), rimMat);
+    rim.rotation.x = -Math.PI/2; rim.position.set(x, 0.06, z);
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(r*0.78, 28), floorMat);
+    floor.rotation.x = -Math.PI/2; floor.position.set(x, 0.04, z);
+    craters.add(rim, floor);
+  }
+}
+craters.visible = false;
+scene.add(craters);
+
+const earthSky = new THREE.Mesh(
+  new THREE.SphereGeometry(1400, 32, 16),
+  new THREE.MeshStandardMaterial({color:0x2f6fd0, emissive:0x081a34, roughness:0.85, fog:false})
+);
+earthSky.visible = false;
+scene.add(earthSky);
+
+/* Space Coast geography — fixed in the world. +x is east (the downrange direction), -z is north.
+   The Atlantic shoreline runs NNW past the pad and bulges east at Cape Canaveral to the south;
+   Mosquito Lagoon sits north behind the barrier beach, the Indian River to the west. */
+function coastX(z){
+  let x;
+  if(z<=0) x = 1100 + 0.3*z;                                  // trending NNW toward New Smyrna
+  else if(z<=25000) x = 1100 + 0.33*z;                        // out to the cape point
+  else x = 1100 + 0.33*25000 - 0.6*(z-25000);                 // and back southwest beyond it
+  return x + 120*Math.sin(z/1700) + 55*Math.sin(z/530);
+}
+function isOcean(x, z){ return x > coastX(z); }
+function bandGeometry(z0, z1, step, left, right){
+  // a strip between two x(z) edges, sampled along z — used for beach, surf and lagoons
+  const pos = [];
+  for(let z=z0; z<z1; z+=step){
+    const za = z, zb = Math.min(z+step, z1);
+    const la = left(za), ra = right(za), lb = left(zb), rb = right(zb);
+    pos.push(la,0,za, lb,0,zb, rb,0,zb,  la,0,za, rb,0,zb, ra,0,za);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+const coast = new THREE.Group();
+{
+  const FAR = 400000;
+  const deep = new THREE.MeshStandardMaterial({color:0x1b4d70, roughness:0.22, metalness:0.25, side:THREE.DoubleSide});
+  const ocean = new THREE.Mesh(bandGeometry(-220000, 220000, 1000, z=>coastX(z), ()=>FAR), deep);
+  ocean.position.y = 0.4;
+  coast.add(ocean);
+  const shallow = new THREE.Mesh(bandGeometry(-120000, 120000, 400, z=>coastX(z), z=>coastX(z)+1400),
+    new THREE.MeshStandardMaterial({color:0x3a8f98, roughness:0.3, metalness:0.15, transparent:true, opacity:0.55, side:THREE.DoubleSide}));
+  shallow.position.y = 0.45;
+  coast.add(shallow);
+  const surf = new THREE.Mesh(bandGeometry(-120000, 120000, 200, z=>coastX(z)+8, z=>coastX(z)+34),
+    new THREE.MeshStandardMaterial({color:0xeef5f6, roughness:0.6, transparent:true, opacity:0.7, side:THREE.DoubleSide}));
+  surf.position.y = 0.5;
+  coast.add(surf);
+  const beach = new THREE.Mesh(bandGeometry(-120000, 120000, 200, z=>coastX(z)-95, z=>coastX(z)+2),
+    new THREE.MeshStandardMaterial({color:0xd9cba2, roughness:1, side:THREE.DoubleSide}));
+  beach.position.y = 0.3;
+  coast.add(beach);
+  const lagoonMat = new THREE.MeshStandardMaterial({color:0x2d5a63, roughness:0.2, metalness:0.2, side:THREE.DoubleSide});
+  const mosquito = new THREE.Mesh(bandGeometry(-60000, -5200, 300,
+    z=>coastX(z)-1200-900*Math.sin(z/7000)**2 - 2200*Math.min(1, (-z-5200)/6000),
+    z=>coastX(z)-650), lagoonMat);
+  mosquito.position.y = 0.35;
+  coast.add(mosquito);
+  const indian = new THREE.Mesh(bandGeometry(-90000, 90000, 500,
+    z=>-10500 + 0.22*z + 500*Math.sin(z/4100),
+    z=>-7600 + 0.22*z + 380*Math.sin(z/2900+1)), lagoonMat);
+  indian.position.y = 0.35;
+  coast.add(indian);
+}
+scene.add(coast);
+
+/* Kennedy Space Center — Vehicle Assembly Building with its flag, Launch Control Center,
+   the crawlerway out to the pad, the sound-suppression water tower, palms, palmetto and slash pine */
+function makeFlagTexture(){
+  const c = document.createElement('canvas'); c.width = 760; c.height = 400;
+  const ctx = c.getContext('2d');
+  const sh = 400/13;
+  for(let i=0;i<13;i++){ ctx.fillStyle = i%2 ? '#ffffff' : '#b22234'; ctx.fillRect(0, i*sh, 760, Math.ceil(sh)); }
+  const cw = 760*0.4, ch = sh*7;
+  ctx.fillStyle = '#3c3b6e'; ctx.fillRect(0, 0, cw, ch);
+  ctx.fillStyle = '#ffffff';
+  const star = (x, y, r)=>{ ctx.beginPath(); for(let k=0;k<10;k++){ const a = -Math.PI/2 + k*Math.PI/5, rr = k%2 ? r*0.4 : r; ctx.lineTo(x+Math.cos(a)*rr, y+Math.sin(a)*rr); } ctx.closePath(); ctx.fill(); };
+  for(let row=0; row<9; row++){
+    const n = row%2 ? 5 : 6;
+    for(let col=0; col<n; col++){
+      const x = cw/12 * (1 + col*2 + (row%2)), y = ch/10 * (1 + row);
+      star(x, y, 8);
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 8;
+  return t;
+}
+
+/* Buildings — LC-39B up the coast, the KSC industrial area, Titusville across the Indian River,
+   and the high-rise condos along the beach to the north. Instanced boxes wearing a window texture. */
+const SITES = {
+  pad39b: {x:-1500, z:-2700},
+  industry: {x0:-2900, x1:-1650, z0:-1050, z1:-250},
+};
+function makeWindowTexture(){
+  const c = document.createElement('canvas'); c.width = 128; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#e4e3de'; ctx.fillRect(0,0,128,256);
+  for(let y=6; y<256; y+=16){
+    for(let x=6; x<128; x+=14){
+      const lit = Math.random()<0.12;
+      ctx.fillStyle = lit ? '#e9d79a' : (Math.random()<0.5 ? '#3d4a57' : '#4a5866');
+      ctx.fillRect(x, y, 9, 9);
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 8;
+  return t;
+}
+const buildings = new THREE.Group();
+{
+  const winMat = new THREE.MeshStandardMaterial({map:makeWindowTexture(), roughness:0.75, metalness:0.1});
+  const roofMat = new THREE.MeshStandardMaterial({color:0x8d8f91, roughness:0.9});
+  const boxGeo = new THREE.BoxGeometry(1,1,1); boxGeo.translate(0, 0.5, 0);
+  const tints = [0xffffff, 0xf1ece0, 0xe6edf2, 0xdcd6c8, 0xc9d6df];
+  const color = new THREE.Color();
+  function cluster(count, gen){
+    const walls = new THREE.InstancedMesh(boxGeo, winMat, count);
+    const roofs = new THREE.InstancedMesh(boxGeo, roofMat, count);
+    const d = new THREE.Object3D();
+    for(let i=0;i<count;i++){
+      const b = gen(i);
+      d.position.set(b.x, 0, b.z); d.rotation.set(0, b.rot||0, 0); d.scale.set(b.w, b.h, b.d); d.updateMatrix();
+      walls.setMatrixAt(i, d.matrix);
+      walls.setColorAt(i, color.setHex(tints[i % tints.length]));
+      d.position.set(b.x, b.h, b.z); d.scale.set(b.w*1.02, 0.6, b.d*1.02); d.updateMatrix();
+      roofs.setMatrixAt(i, d.matrix);
+    }
+    walls.instanceColor.needsUpdate = true;
+    buildings.add(walls, roofs);
+  }
+  const rnd = (a, b)=>a + Math.random()*(b-a);
+
+  // KSC industrial area: low office blocks, hangars and labs on a loose grid
+  const I = SITES.industry;
+  cluster(46, i=>{
+    const gx = i%8, gz = Math.floor(i/8);
+    return {x:I.x0 + 70 + gx*150 + rnd(-25,25), z:I.z0 + 60 + gz*130 + rnd(-20,20), w:rnd(30,85), d:rnd(25,60), h:rnd(9,30), rot:rnd(-0.06,0.06)};
+  });
+  // Titusville, west across the Indian River: a low town with a few taller blocks
+  cluster(260, i=>{
+    const z = rnd(-14000, 3000);
+    const riverW = -10500 + 0.22*z;
+    const tall = Math.random()<0.06;
+    return {x:riverW - rnd(400, 5200), z, w:rnd(14,45), d:rnd(14,40), h: tall ? rnd(32,62) : rnd(5,16), rot:rnd(-0.1,0.1)};
+  });
+  // beachfront condos to the north, just inland of the dune line
+  cluster(70, i=>{
+    const z = rnd(-46000, -30000);
+    return {x:coastX(z) - rnd(130, 320), z, w:rnd(24,40), d:rnd(18,30), h:rnd(22,72), rot:0.3};
+  });
+
+  // LC-39B: hardstand, three catenary lightning towers, service structure and water tower
+  const P = SITES.pad39b;
+  const pad = new THREE.Mesh(new THREE.CircleGeometry(110, 8), new THREE.MeshStandardMaterial({color:0x7a7d80, roughness:0.95}));
+  pad.rotation.x = -Math.PI/2; pad.position.set(P.x, 0.06, P.z);
+  buildings.add(pad);
+  const towerMat = new THREE.MeshStandardMaterial({color:0x8e959c, metalness:0.5, roughness:0.5});
+  const tops = [];
+  for(let i=0;i<3;i++){
+    const a = i*Math.PI*2/3 + 0.3, tx = P.x + Math.cos(a)*120, tz = P.z + Math.sin(a)*120;
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 2.2, 180, 10), towerMat);
+    t.position.set(tx, 90, tz); buildings.add(t);
+    tops.push(new THREE.Vector3(tx, 180, tz));
+  }
+  for(let i=0;i<3;i++) buildings.add(strut(tops[i], tops[(i+1)%3], 0.12, towerMat));   // catenary wires
+  const fss = new THREE.Mesh(new THREE.BoxGeometry(11, 95, 11), steel);
+  fss.position.set(P.x+22, 47.5, P.z); buildings.add(fss);
+  const wt = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 14, 24), new THREE.MeshStandardMaterial({color:0xe9ecef, metalness:0.3, roughness:0.5}));
+  wt.position.set(P.x+150, 80, P.z-90); buildings.add(wt);
+  buildings.add(strut(new THREE.Vector3(P.x+150, 73, P.z-90), new THREE.Vector3(P.x+150, 0, P.z-90), 2.2, towerMat));
+}
+scene.add(buildings);
+
+const spaceport = new THREE.Group();
+{
+  const concrete = new THREE.MeshStandardMaterial({color:0xd9dcdf, roughness:0.8});
+  const darkPanel = new THREE.MeshStandardMaterial({color:0x4d535a, roughness:0.7});
+  const VAB = {x:-3300, z:-2700};
+  const vab = new THREE.Mesh(new THREE.BoxGeometry(218, 160, 158), concrete);
+  vab.position.set(VAB.x, 80, VAB.z);
+  spaceport.add(vab);
+  for(const dx of [-55, 55]){
+    const door = new THREE.Mesh(new THREE.BoxGeometry(30, 140, 1), darkPanel);
+    door.position.set(VAB.x+dx, 70, VAB.z+79.6);
+    spaceport.add(door);
+  }
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(64, 34), new THREE.MeshStandardMaterial({map:makeFlagTexture(), roughness:0.7}));
+  flag.position.set(VAB.x, 112, VAB.z+79.8);
+  spaceport.add(flag);
+  const lcc = new THREE.Mesh(new THREE.BoxGeometry(110, 24, 50), concrete);
+  lcc.position.set(VAB.x+230, 12, VAB.z+150);
+  spaceport.add(lcc);
+  const lccWindows = new THREE.Mesh(new THREE.BoxGeometry(104, 6, 1), darkPanel);
+  lccWindows.position.set(VAB.x+230, 17, VAB.z+175.6);
+  spaceport.add(lccWindows);
+
+  const tankMat = new THREE.MeshStandardMaterial({color:0xe9ecef, metalness:0.3, roughness:0.5});
+  const wt = {x:150, z:-110};
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(10, 10, 16, 32), tankMat);
+  tank.position.set(wt.x, 82, wt.z);
+  spaceport.add(tank);
+  for(let i=0;i<4;i++){
+    const a = i*Math.PI/2 + Math.PI/4;
+    spaceport.add(strut(new THREE.Vector3(wt.x+Math.cos(a)*8, 75, wt.z+Math.sin(a)*8), new THREE.Vector3(wt.x+Math.cos(a)*13, 0, wt.z+Math.sin(a)*13), 0.7, mastMat));
+  }
+
+  const crawl = new THREE.MeshStandardMaterial({color:0xb4ad9a, roughness:1});
+  const dx = VAB.x, dz = VAB.z+79, len = Math.hypot(dx, dz);
+  for(const off of [-14, 14]){
+    const road = new THREE.Group();
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(13, len), crawl);
+    strip.rotation.x = -Math.PI/2; strip.position.x = off;
+    road.add(strip);
+    road.rotation.y = Math.atan2(dx, dz);
+    road.position.set(dx/2, 0.07, dz/2);
+    spaceport.add(road);
+  }
+
+  // vegetation: cabbage palms, palmetto scrub and slash pine, kept off the pad, crawlerway, buildings and water
+  const clear = (x, z)=>{
+    if(Math.hypot(x, z) < 150) return false;
+    if(Math.hypot(x-SITES.pad39b.x, z-SITES.pad39b.z) < 170) return false;
+    if(x>SITES.industry.x0-40 && x<SITES.industry.x1+40 && z>SITES.industry.z0-40 && z<SITES.industry.z1+40) return false;
+    if(isOcean(x+120, z)) return false;
+    const t = (x*dx + z*dz)/(len*len);
+    if(t>0 && t<1 && Math.hypot(x - t*dx, z - t*dz) < 45) return false;
+    if(Math.abs(x-VAB.x)<170 && Math.abs(z-VAB.z)<150) return false;
+    if(Math.abs(x-wt.x)<25 && Math.abs(z-wt.z)<25) return false;
+    return true;
+  };
+  const dummy = new THREE.Object3D();
+  const place = (count, spread, fn)=>{ let n = 0, guard = 0; while(n<count && guard++<count*40){ const x = (Math.random()*2-1)*spread - spread*0.25, z = (Math.random()*2-1)*spread*0.9 - spread*0.35; if(clear(x, z)){ fn(n++, x, z); } } return n; };
+  const PALMS = 340;
+  const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.34, 9, 6), new THREE.MeshStandardMaterial({color:0x7b6a52, roughness:1}), PALMS);
+  const crown = new THREE.InstancedMesh(new THREE.SphereGeometry(2.7, 9, 5), new THREE.MeshStandardMaterial({color:0x3e5f2d, roughness:0.9}), PALMS);
+  place(PALMS, 2600, (i, x, z)=>{
+    const s = 0.75 + Math.random()*0.6, lean = (Math.random()-0.5)*0.12;
+    dummy.position.set(x, 4.5*s, z); dummy.rotation.set(lean, 0, lean); dummy.scale.set(s, s, s); dummy.updateMatrix(); trunk.setMatrixAt(i, dummy.matrix);
+    dummy.position.set(x + lean*9*s, 9*s, z - lean*9*s); dummy.rotation.set(0, Math.random()*3, 0); dummy.scale.set(s, s*0.5, s); dummy.updateMatrix(); crown.setMatrixAt(i, dummy.matrix);
+  });
+  const SCRUB = 900;
+  const scrub = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 5), new THREE.MeshStandardMaterial({color:0x56663a, roughness:1}), SCRUB);
+  place(SCRUB, 2400, (i, x, z)=>{ const s = 1.8+Math.random()*2.6; dummy.position.set(x, s*0.35, z); dummy.rotation.set(0, Math.random()*3, 0); dummy.scale.set(s*1.4, s*0.6, s); dummy.updateMatrix(); scrub.setMatrixAt(i, dummy.matrix); });
+  const PINES = 220;
+  const pine = new THREE.InstancedMesh(new THREE.ConeGeometry(4, 15, 7), new THREE.MeshStandardMaterial({color:0x2f4b2c, roughness:0.9}), PINES);
+  place(PINES, 4200, (i, x, z)=>{ const s = 0.8+Math.random()*0.8; dummy.position.set(x, 9*s, z); dummy.rotation.set(0,0,0); dummy.scale.set(s, s, s); dummy.updateMatrix(); pine.setMatrixAt(i, dummy.matrix); });
+  spaceport.add(trunk, crown, scrub, pine);
+}
+scene.add(spaceport);
+
+/* Clouds — soft sprite puffs in a band that wraps around the camera, so there is always weather to climb through */
+function makeCloudTexture(){
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+  const ctx = c.getContext('2d');
+  for(let i=0;i<14;i++){
+    const x = 40 + Math.random()*176, y = 50 + Math.random()*40, r = 22 + Math.random()*30;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.85)');
+    g.addColorStop(0.6, 'rgba(240,244,248,0.45)');
+    g.addColorStop(1, 'rgba(230,236,242,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,256,128);
+  }
+  return new THREE.CanvasTexture(c);
+}
+const cloudTex = makeCloudTexture();
+const CLOUD_BAND = 14000;
+const clouds = [];
+const cloudGroup = new THREE.Group();
+for(let i=0;i<70;i++){
+  const cirrus = i<12;
+  const mat = new THREE.SpriteMaterial({map:cloudTex, transparent:true, depthWrite:false, fog:false, opacity: cirrus ? 0.55 : 0.9});
+  const s = new THREE.Sprite(mat);
+  const w = cirrus ? 2500+Math.random()*2500 : 450+Math.random()*900;
+  s.scale.set(w, cirrus ? w*0.12 : w*0.42, 1);
+  cloudGroup.add(s);
+  clouds.push({s, bx:Math.random()*CLOUD_BAND, alt: cirrus ? 9000+Math.random()*2500 : 1400+Math.random()*5200, z:-300-Math.random()*6500});
+}
+scene.add(cloudGroup);
+
+/* Lunar hills — two ridgelines on the horizon behind the landing site */
+function buildRidge(z, baseH, varH, color){
+  const N = 140, span = 60000;
+  const pos = [];
+  let h = baseH;
+  const tops = [];
+  for(let i=0;i<=N;i++){ h = Math.max(baseH*0.3, h + (Math.random()*2-1)*varH*0.35); tops.push(h); }
+  for(let i=0;i<N;i++){
+    const x0 = -span/2 + span*i/N, x1 = -span/2 + span*(i+1)/N;
+    pos.push(x0,-20,0, x1,-20,0, x1,tops[i+1],0,  x0,-20,0, x1,tops[i+1],0, x0,tops[i],0);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({color, roughness:1, side:THREE.DoubleSide, fog:false}));
+  m.position.z = z;
+  return m;
+}
+const moonHills = new THREE.Group();
+moonHills.add(buildRidge(-9500, 520, 600, 0x575755), buildRidge(-3800, 110, 160, 0x6c6b68));
+moonHills.visible = false;
+scene.add(moonHills);
+
+/* ---------- SPRITES ---------- */
+function makeFlameSprite(color){
+  const c = document.createElement('canvas'); c.width=c.height=128;
+  const ctx = c.getContext('2d');
+  const grd = ctx.createRadialGradient(64,64,4,64,64,64);
+  grd.addColorStop(0,'rgba(255,255,255,0.95)');
+  grd.addColorStop(0.25,color);
+  grd.addColorStop(0.6,'rgba(255,90,20,0.35)');
+  grd.addColorStop(1,'rgba(255,90,20,0)');
+  ctx.fillStyle = grd; ctx.fillRect(0,0,128,128);
+  const tex = new THREE.CanvasTexture(c);
+  const mat = new THREE.SpriteMaterial({map:tex, blending:THREE.AdditiveBlending, depthWrite:false, transparent:true});
+  return new THREE.Sprite(mat);
+}
+function makePuffSprite(){
+  const s = makeFlameSprite('rgba(220,235,255,0.9)');
+  s.scale.set(1.1,1.1,1.1);
+  s.visible = false;
+  return s;
+}
+function strut(p1, p2, r, mat){
+  const dir = new THREE.Vector3().subVectors(p2, p1);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, dir.length(), 6), mat);
+  m.position.copy(p1).addScaledVector(dir, 0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
+  return m;
+}
+
+/* ---------- ROCKET BUILD ---------- */
+/* ---------- VEHICLE DESIGNS ----------
+   Each design dresses the same three stage groups differently and scales their performance.
+   Builders add meshes to the group and return the stage height. */
+const darkMetal = new THREE.MeshStandardMaterial({color:0x2a2f3a, metalness:0.7, roughness:0.4});
+function M(color, opts){ return new THREE.MeshStandardMaterial(Object.assign({color, roughness:0.45, metalness:0.2}, opts||{})); }
+function cyl(g, rTop, rBot, h, y, mat, opts){
+  const o = opts||{};
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, o.seg||40, 1, !!o.open, o.t0||0, o.tl||Math.PI*2), mat);
+  m.position.set(o.x||0, y, o.z||0);
+  g.add(m);
+  return m;
+}
+function bell(g, rTop, rBot, h, x, y, z){ return cyl(g, rTop, rBot, h, y, darkMetal, {seg:14, x, z}); }
+function ring(n, r, offset, fn){ for(let i=0;i<n;i++){ const a = i*Math.PI*2/n + (offset||0); fn(Math.sin(a)*r, Math.cos(a)*r, a); } }
+function fin(g, mat, w, h, d, r, y, a){
+  const f = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  f.position.set(Math.sin(a)*r, y, Math.cos(a)*r);
+  f.rotation.y = a;
+  g.add(f);
+}
+// extra engine plumes for strap-on boosters; they mirror the core flame each frame
+function boosterFlame(g, x, y, z, k){
+  const f = makeFlameSprite('rgba(255,150,60,0.9)');
+  f.position.set(x, y, z);
+  f.visible = false;
+  f.userData.k = k;
+  g.add(f);
+  g.userData.extraFlames.push(f);
+}
+
+/* Nuri (KSLV-II) livery decal: Taegukgi above a vertical "대한민국", wrapped onto the first stage */
+function drawTaegukgi(ctx, x, y, w){
+  const h = w*2/3, cx = x+w/2, cy = y+h/2, R = h/4;
+  const RED = '#cd2e3a', BLUE = '#0047a0';
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1; ctx.strokeRect(x+0.5, y+0.5, w-1, h-1);
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(Math.atan2(2, 3));
+  ctx.fillStyle = RED;  ctx.beginPath(); ctx.arc(0, 0, R, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = BLUE; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI); ctx.fill();
+  ctx.fillStyle = RED;  ctx.beginPath(); ctx.arc(-R/2, 0, R/2, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = BLUE; ctx.beginPath(); ctx.arc(R/2, 0, R/2, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  // trigrams on the diagonals: 건 ☰ top-left, 감 ☵ top-right, 리 ☲ bottom-left, 곤 ☷ bottom-right
+  const bars = {gun:[1,1,1], gam:[0,1,0], ri:[1,0,1], gon:[0,0,0]};
+  const corners = [[-3,-2,'gun'],[3,-2,'gam'],[-3,2,'ri'],[3,2,'gon']];
+  const L = R*1.0, T = R/6, G = R/9, D = R*1.75;
+  ctx.fillStyle = '#000000';
+  for(const [dx, dy, k] of corners){
+    const a = Math.atan2(dy, dx);
+    ctx.save();
+    ctx.translate(cx + Math.cos(a)*D, cy + Math.sin(a)*D);
+    ctx.rotate(a + Math.PI/2);
+    bars[k].forEach((solid, i)=>{
+      const by = -((T*3+G*2)/2) + i*(T+G);
+      if(solid) ctx.fillRect(-L/2, by, L, T);
+      else { ctx.fillRect(-L/2, by, L*0.45, T); ctx.fillRect(L*0.05, by, L*0.45, T); }
+    });
+    ctx.restore();
+  }
+}
+function makeNuriDecal(){
+  const c = document.createElement('canvas'); c.width = 176; c.height = 1024;
+  const ctx = c.getContext('2d');
+  drawTaegukgi(ctx, 10, 24, 156);
+  ctx.fillStyle = '#1b2433';
+  ctx.font = "700 104px 'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif";
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ['대','한','민','국'].forEach((ch, i)=>ctx.fillText(ch, 88, 250 + i*138));
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 4;
+  return tex;
+}
+
+const DESIGNS = {
+  nuri:{
+    name:'누리호', tagline:'한국형 발사체 · 75톤 엔진 4기 클러스터', mult:{t:1.25, f:1.1, d:1.05},
+    s1(g){
+      const white = M(0xf2f3f5, {roughness:0.42, metalness:0.12}), grey = M(0x3b4049, {roughness:0.55, metalness:0.2});
+      cyl(g, 2.3, 2.3, 18, 9, white);
+      cyl(g, 2.3, 2.5, 1.2, 0.6, white);                 // aft skirt
+      cyl(g, 2.32, 2.32, 1.0, 17.5, grey);               // interstage
+      ring(4, 1.0, Math.PI/4, (x,z)=>bell(g, 0.55, 0.95, 1.6, x, -0.6, z)); // four clustered 75 tf engines
+      const decal = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.33, 2.33, 11, 12, 1, true, -0.4, 0.8),
+        new THREE.MeshStandardMaterial({map:makeNuriDecal(), transparent:true, roughness:0.5, metalness:0.05})
+      );
+      decal.position.y = 10.6;
+      g.add(decal);
+      return 18;
+    },
+    s2(g){
+      const white = M(0xf2f3f5, {roughness:0.42, metalness:0.12}), grey = M(0x3b4049, {roughness:0.55, metalness:0.2});
+      cyl(g, 2.3, 2.3, 9, 4.5, white);
+      cyl(g, 2.32, 2.32, 0.5, 8.6, grey);
+      cyl(g, 1.6, 2.3, 1.6, 9.8, white);                 // taper to the narrower third stage
+      bell(g, 0.55, 1.1, 1.6, 0, -0.4, 0);               // single 75 tf vacuum engine
+      return 10.6;
+    },
+    s3(g){
+      const white = M(0xf2f3f5, {roughness:0.42, metalness:0.12}), grey = M(0x3b4049, {roughness:0.55, metalness:0.2});
+      cyl(g, 1.6, 1.6, 4.5, 2.25, white);
+      cyl(g, 1.62, 1.62, 0.5, 0.25, grey);
+      bell(g, 0.35, 0.6, 0.9, 0, -0.2, 0);               // 7 tf third-stage engine
+      return 4.5;
+    },
+  },
+  starwell:{
+    name:'스타웰', tagline:'균형형 기본 기체', mult:{t:1, f:1, d:1},
+    s1(g){
+      cyl(g, 2.6, 2.6, 16, 8, M(0xd7dee8, {roughness:0.5}));
+      const navy = M(0x223047, {roughness:0.6});
+      ring(4, 2.7, 0, (x,z,a)=>fin(g, navy, 0.3, 4, 3, 2.7, 1.6, a));
+      ring(4, 1.3, Math.PI/4, (x,z)=>bell(g, 1.0, 1.35, 1.8, x, -0.3, z));
+      return 16;
+    },
+    s2(g){
+      cyl(g, 2.2, 2.2, 10, 5, M(0xe7edf5));
+      cyl(g, 2.22, 2.22, 1.1, 2.5, M(0xff5a2e, {roughness:0.5}));
+      bell(g, 1.1, 1.5, 1.6, 0, -0.2, 0);
+      return 10;
+    },
+    s3(g){
+      cyl(g, 1.5, 1.5, 4.4, 2.2, M(0xc9d3e0, {metalness:0.35}));
+      cyl(g, 1.52, 1.52, 0.7, 1.2, M(0x4fd1ff, {roughness:0.5}));
+      bell(g, 0.6, 0.85, 1.0, 0, -0.1, 0);
+      return 4.4;
+    },
+  },
+  saturn:{
+    name:'새턴 V', tagline:'흑백 롤 패턴 · 긴 연소', mult:{t:1.15, f:1.12, d:1.08},
+    s1(g){
+      const white = M(0xeef1f4, {roughness:0.5, metalness:0.1}), black = M(0x15181d, {roughness:0.6, metalness:0.1});
+      cyl(g, 2.8, 2.8, 17, 8.5, white);
+      // the roll pattern: alternating black quarters low on the stage, offset quarters near the top
+      for(const t0 of [0, Math.PI]) cyl(g, 2.83, 2.83, 5.5, 3.6, black, {open:true, t0, tl:Math.PI/2});
+      for(const t0 of [Math.PI/2, Math.PI*1.5]) cyl(g, 2.83, 2.83, 1.8, 14.4, black, {open:true, t0, tl:Math.PI/2});
+      cyl(g, 2.83, 2.83, 0.9, 16.4, black);
+      ring(4, 3.1, Math.PI/4, (x,z,a)=>fin(g, black, 0.35, 3.6, 2.2, 3.1, 1.8, a));
+      bell(g, 0.7, 1.15, 2.0, 0, -0.6, 0);
+      ring(4, 1.55, Math.PI/4, (x,z)=>bell(g, 0.7, 1.15, 2.0, x, -0.6, z));
+      return 17;
+    },
+    s2(g){
+      const white = M(0xeef1f4, {roughness:0.5, metalness:0.1}), black = M(0x15181d, {roughness:0.6, metalness:0.1});
+      cyl(g, 2.8, 2.8, 9, 4.5, white);
+      cyl(g, 2.83, 2.83, 0.9, 0.45, black);
+      cyl(g, 1.6, 2.8, 2.2, 10.1, white);
+      bell(g, 0.45, 0.7, 1.0, 0, -0.3, 0);
+      ring(4, 1.2, Math.PI/4, (x,z)=>bell(g, 0.45, 0.7, 1.0, x, -0.3, z));
+      return 11.2;
+    },
+    s3(g){
+      const white = M(0xeef1f4, {roughness:0.5, metalness:0.1}), black = M(0x15181d, {roughness:0.6, metalness:0.1});
+      cyl(g, 1.6, 1.6, 5, 2.5, white);
+      cyl(g, 1.62, 1.62, 1.0, 0.5, black);
+      for(const t0 of [0, Math.PI]) cyl(g, 1.62, 1.62, 0.7, 4.4, black, {open:true, t0, tl:Math.PI/2});
+      bell(g, 0.45, 0.75, 1.0, 0, -0.2, 0);
+      return 5;
+    },
+  },
+  heavy:{
+    name:'헤비', tagline:'사이드 부스터 2기 · 최대 추력', mult:{t:1.4, f:1.25, d:1.25},
+    s1(g){
+      const white = M(0xf3f4f6, {roughness:0.4, metalness:0.15}), carbon = M(0x22252a, {roughness:0.55, metalness:0.3});
+      cyl(g, 2.3, 2.3, 17, 8.5, white);
+      cyl(g, 2.32, 2.32, 1.6, 16.2, carbon);
+      cyl(g, 2.3, 2.3, 0.4, 0.1, darkMetal);
+      bell(g, 0.32, 0.55, 1.1, 0, -0.5, 0);
+      ring(8, 1.45, 0, (x,z)=>bell(g, 0.32, 0.55, 1.1, x, -0.5, z));
+      ring(4, 2.35, Math.PI/4, (x,z,a)=>fin(g, carbon, 0.9, 6, 0.25, 2.35, 3.2, a)); // folded landing legs
+      for(const x of [-4.75, 4.75]){
+        cyl(g, 2.1, 2.1, 16, 8, white, {x});
+        cyl(g, 0.05, 2.1, 3.4, 17.7, carbon, {x});
+        ring(4, 1.0, Math.PI/4, (bx,bz)=>bell(g, 0.32, 0.55, 1.1, x+bx, -0.5, bz));
+        ring(4, 2.15, Math.PI/4, (fx,fz,a)=>{ const gf = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.12,0.9), carbon); gf.position.set(x+fx, 15.2, fz); gf.rotation.y = a; g.add(gf); });
+        for(const y of [3, 14]){ const s = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.45,0.6), carbon); s.position.set(Math.sign(x)*3.35, y, 0); g.add(s); }
+        boosterFlame(g, x, -3.0, 0, 0.85);
+      }
+      return 17;
+    },
+    s2(g){
+      const white = M(0xf3f4f6, {roughness:0.4, metalness:0.15}), carbon = M(0x22252a, {roughness:0.55, metalness:0.3});
+      cyl(g, 2.3, 2.3, 9, 4.5, white);
+      cyl(g, 2.32, 2.32, 0.5, 6.5, carbon);
+      cyl(g, 1.6, 2.3, 1.4, 9.7, white);
+      cyl(g, 0.55, 1.6, 2.4, -1.0, darkMetal, {seg:20}); // big vacuum nozzle
+      return 10.4;
+    },
+    s3(g){
+      const white = M(0xf3f4f6, {roughness:0.4, metalness:0.15}), carbon = M(0x22252a, {roughness:0.55, metalness:0.3});
+      cyl(g, 1.6, 1.6, 3.6, 1.8, white);
+      cyl(g, 1.62, 1.62, 0.6, 0.3, carbon);
+      bell(g, 0.45, 0.75, 1.0, 0, -0.2, 0);
+      return 3.6;
+    },
+  },
+  soyuz:{
+    name:'소유즈', tagline:'부스터 4기 · 가볍고 민첩', mult:{t:1.05, f:0.95, d:0.9},
+    s1(g){
+      const green = M(0xaebaa6, {roughness:0.6, metalness:0.1}), red = M(0xc8372d, {roughness:0.5});
+      cyl(g, 1.9, 2.1, 15, 7.5, green);
+      cyl(g, 2.02, 2.02, 0.5, 13.6, red);
+      ring(4, 0.8, Math.PI/4, (x,z)=>bell(g, 0.3, 0.55, 1.0, x, -0.3, z));
+      // the four tapered strap-on boosters that give the silhouette its flared skirt
+      ring(4, 2.95, Math.PI/4, (x,z,a)=>{
+        cyl(g, 0.8, 1.55, 12.5, 6.25, green, {x, z, seg:20});
+        cyl(g, 0.05, 0.8, 2.6, 13.8, green, {x, z, seg:20});
+        cyl(g, 0.86, 0.92, 0.4, 11, red, {x, z, seg:20});
+        bell(g, 0.4, 0.75, 1.2, x, -0.5, z);
+        fin(g, red, 0.15, 1.3, 1.1, 2.95+1.55, 0.9, a);
+        boosterFlame(g, x, -2.6, z, 0.55);
+      });
+      return 15;
+    },
+    s2(g){
+      const green = M(0xaebaa6, {roughness:0.6, metalness:0.1}), red = M(0xc8372d, {roughness:0.5});
+      ring(6, 1.0, 0, (x,z)=>g.add(strut(new THREE.Vector3(x*1.85,0,z*1.85), new THREE.Vector3(x*1.55,1.6,z*1.55), 0.08, darkMetal))); // open lattice interstage
+      cyl(g, 1.6, 1.6, 7, 5.1, green);
+      cyl(g, 1.62, 1.62, 0.4, 8.1, red);
+      bell(g, 0.4, 0.7, 1.0, 0, 0.5, 0);
+      return 8.6;
+    },
+    s3(g){
+      cyl(g, 1.6, 1.6, 4, 2, M(0xd5d8d2, {roughness:0.5}));
+      cyl(g, 1.62, 1.62, 0.5, 0.5, M(0xaebaa6, {roughness:0.6}));
+      bell(g, 0.4, 0.7, 0.9, 0, -0.2, 0);
+      return 4;
+    },
+  },
+};
+const DESIGN_KEY = 'ignition.design';
+let designKey = 'starwell';
+try{ const saved = localStorage.getItem(DESIGN_KEY); if(saved && DESIGNS[saved]) designKey = saved; }catch(e){}
+
+/* ---------- VEHICLE DETAILING ----------
+   Shared finishing pass on every design: panel seam rings, a cable raceway, a vertical name decal
+   (with flag where the real vehicle carried one), and frost on the cryogenic tank that melts off after liftoff. */
+function drawUSFlag(ctx, x, y, w){
+  const h = w*10/19, sh = h/13;
+  for(let i=0;i<13;i++){ ctx.fillStyle = i%2 ? '#ffffff' : '#b22234'; ctx.fillRect(x, y+i*sh, w, Math.ceil(sh)); }
+  const cw = w*0.4, ch = sh*7;
+  ctx.fillStyle = '#3c3b6e'; ctx.fillRect(x, y, cw, ch);
+  ctx.fillStyle = '#ffffff';
+  for(let row=0; row<9; row++){
+    const n = row%2 ? 5 : 6;
+    for(let col=0; col<n; col++){
+      const sx = x + cw/12*(1 + col*2 + (row%2)), sy = y + ch/10*(1 + row), r = Math.max(1.5, w/95);
+      ctx.beginPath();
+      for(let k=0;k<10;k++){ const a = -Math.PI/2 + k*Math.PI/5, rr = k%2 ? r*0.4 : r; ctx.lineTo(sx+Math.cos(a)*rr, sy+Math.sin(a)*rr); }
+      ctx.closePath(); ctx.fill();
+    }
+  }
+}
+function makeNameDecal(text, color, flag){
+  const W = 176, H = 1024, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  let y = 20;
+  if(flag==='us'){ drawUSFlag(ctx, 12, y, W-24); y += (W-24)*10/19 + 34; }
+  const chars = [...text];
+  const step = Math.min(132, (H - y - 20)/chars.length);
+  ctx.fillStyle = color;
+  ctx.font = "800 " + Math.round(step*0.86) + "px 'Big Shoulders Display','Oswald','Apple SD Gothic Neo',sans-serif";
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  chars.forEach((ch, i)=>ctx.fillText(ch, W/2, y + step*(i+0.5)));
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 8;
+  return tex;
+}
+function makeFrostTexture(){
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  for(let i=0;i<5000;i++){
+    const a = Math.random();
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.15 + a*0.55).toFixed(2) + ')';
+    const r = 1 + Math.random()*3.5;
+    ctx.fillRect(Math.random()*256, Math.random()*256, r, r*(0.6+Math.random()));
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(4, 2);
+  return t;
+}
+const frostTex = makeFrostTexture();
+const frostMats = [];
+const seamMat = new THREE.MeshStandardMaterial({color:0x2c3138, roughness:0.7, metalness:0.3});
+const racewayMat = new THREE.MeshStandardMaterial({color:0xc9ced4, roughness:0.55, metalness:0.25});
+// radius of each stage's main barrel, and the decal each design wears (stage index, text, colour, flag)
+const DESIGN_FINISH = {
+  nuri:     {r:[2.3, 2.3, 1.6], frost:[0.35, 0.75]},
+  starwell: {r:[2.6, 2.2, 1.5], frost:[0.45, 0.85], decal:{stage:1, text:'STARWELL', color:'#1d2a44', y0:3, y1:15}},
+  saturn:   {r:[2.8, 2.8, 1.6], frost:[0.42, 0.78], decal:{stage:1, text:'USA', color:'#14171c', flag:'us', y0:6.5, y1:16}},
+  heavy:    {r:[2.3, 2.3, 1.6], frost:[0.5, 0.88], decal:{stage:1, text:'HEAVY', color:'#24272c', y0:4, y1:14.5}},
+  soyuz:    {r:[2.05, 1.6, 1.6], frost:[0.55, 0.85], decal:{stage:1, text:'СОЮЗ', color:'#a72a22', y0:4.5, y1:12.5}},
+};
+function finishStage(g, idx){
+  const F = DESIGN_FINISH[designKey];
+  const r = F.r[idx-1], h = g.userData.height;
+  for(let y=3.5; y<h-1; y+=3.5){                          // panel seams
+    const seam = new THREE.Mesh(new THREE.CylinderGeometry(r+0.012, r+0.012, 0.06, 48, 1, true), seamMat);
+    seam.position.y = y; g.add(seam);
+  }
+  const a = 0.95;                                          // cable raceway on the camera-facing quarter
+  const rw = new THREE.Mesh(new THREE.BoxGeometry(0.22, h*0.86, 0.32), racewayMat);
+  rw.position.set(Math.sin(a)*(r+0.12), h*0.5, Math.cos(a)*(r+0.12));
+  rw.rotation.y = a;
+  g.add(rw);
+  if(idx===1){                                             // frost on the cryogenic tank — fades after liftoff
+    const [f0, f1] = F.frost;
+    const m = new THREE.MeshStandardMaterial({map:frostTex, transparent:true, opacity:0.85, roughness:0.9, depthWrite:false});
+    frostMats.push(m);
+    const frost = new THREE.Mesh(new THREE.CylinderGeometry(r+0.04, r+0.04, h*(f1-f0), 48, 1, true), m);
+    frost.position.y = h*(f0+f1)/2; g.add(frost);
+  }
+  const d = F.decal;
+  if(d && d.stage===idx){
+    const dh = d.y1 - d.y0;
+    const decal = new THREE.Mesh(
+      new THREE.CylinderGeometry(r+0.03, r+0.03, dh, 14, 1, true, -0.38, 0.76),
+      new THREE.MeshStandardMaterial({map:makeNameDecal(d.text, d.color, d.flag), transparent:true, roughness:0.5, depthWrite:false})
+    );
+    decal.position.y = (d.y0 + d.y1)/2; g.add(decal);
+  }
+}
+
+function rebuildStage(g, build, idx){
+  [...g.children].forEach(c=>{
+    if(c.userData.keep) return;
+    g.remove(c);
+    c.traverse(o=>{ if(o.geometry) o.geometry.dispose(); });
+  });
+  g.userData.extraFlames = [];
+  g.userData.height = build(g);
+  finishStage(g, idx);
+}
+function applyDesignVisual(){
+  const D = DESIGNS[designKey];
+  frostMats.length = 0;
+  rebuildStage(stage1, D.s1, 1);
+  rebuildStage(stage2, D.s2, 2);
+  rebuildStage(stage3, D.s3, 3);
+  [stage1, stage2, stage3].forEach(g=>shadowify(g, true, false));
+}
+function buildFairingHalf(side){
+  const mat = new THREE.MeshStandardMaterial({color:0xeef2f6, roughness:0.35, metalness:0.15, side:THREE.DoubleSide});
+  const g = new THREE.Group();
+  const thetaStart = side>0 ? 0 : Math.PI;
+  const cyl = new THREE.Mesh(new THREE.CylinderGeometry(1.7,1.7,2.2,20,1,true,thetaStart,Math.PI), mat);
+  cyl.position.y = 1.1;
+  g.add(cyl);
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(1.7,4.6,20,1,true,thetaStart,Math.PI), mat);
+  cone.position.y = 2.2 + 2.3;
+  g.add(cone);
+  g.userData.side = side;
+  return g;
+}
+function buildSatellite(){
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({color:0xd7dee8, roughness:0.35, metalness:0.6});
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(1.3,1.3,1.6), bodyMat));
+  const panelMat = new THREE.MeshStandardMaterial({color:0x18305a, roughness:0.4, metalness:0.3, emissive:0x0a1830, emissiveIntensity:0.3});
+  const panelGeo = new THREE.BoxGeometry(3.6,1.6,0.06);
+  const panelL = new THREE.Mesh(panelGeo, panelMat); panelL.position.set(-2.6,0,0); g.add(panelL);
+  const panelR = new THREE.Mesh(panelGeo, panelMat); panelR.position.set(2.6,0,0); g.add(panelR);
+  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1.4,8), new THREE.MeshStandardMaterial({color:0xaab4c2, metalness:0.7}));
+  antenna.position.set(0,1.1,0);
+  g.add(antenna);
+  return g;
+}
+
+/* ---------- CREW VEHICLE BUILD ---------- */
+const goldFoil = new THREE.MeshStandardMaterial({color:0xc9a227, roughness:0.32, metalness:0.75});
+const cabinMat = new THREE.MeshStandardMaterial({color:0xb9bec6, roughness:0.45, metalness:0.5});
+const hullMat = new THREE.MeshStandardMaterial({color:0xdfe4ea, roughness:0.35, metalness:0.55});
+const windowMat = new THREE.MeshStandardMaterial({color:0x101820, roughness:0.2, metalness:0.8});
+
+// origin at the footpads, so alt 0 means the lander stands on the surface
+function buildLander(deployed){
+  const g = new THREE.Group();
+  const legH = deployed ? 1.3 : 0.45;
+  const descent = new THREE.Mesh(new THREE.CylinderGeometry(1.7,1.7,1.3,8), goldFoil);
+  descent.position.y = legH + 0.65;
+  g.add(descent);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.8,1.2,1.5), cabinMat);
+  cabin.position.y = legH + 1.9;
+  g.add(cabin);
+  const hatch = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.4,0.05), windowMat);
+  hatch.position.set(0, legH + 2.05, 0.77);
+  g.add(hatch);
+  const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.6,0.55,12), darkMetal);
+  bell.position.y = legH - 0.2;
+  g.add(bell);
+  const legMat = new THREE.MeshStandardMaterial({color:0x9aa2ad, metalness:0.6, roughness:0.4});
+  const footR = deployed ? 2.5 : 1.75;
+  for(let i=0;i<4;i++){
+    const a = i*Math.PI/2 + Math.PI/4;
+    const top = new THREE.Vector3(Math.cos(a)*1.45, legH+0.4, Math.sin(a)*1.45);
+    const foot = new THREE.Vector3(Math.cos(a)*footR, 0.08, Math.sin(a)*footR);
+    g.add(strut(top, foot, 0.07, legMat));
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.34,0.08,12), legMat);
+    pad.position.copy(foot); pad.position.y = 0.04;
+    g.add(pad);
+  }
+  g.userData.height = legH + 2.5;
+  return g;
+}
+// origin at the heat shield
+function buildCapsule(){
+  const g = new THREE.Group();
+  const shield = new THREE.Mesh(new THREE.CylinderGeometry(1.75,1.7,0.35,24), new THREE.MeshStandardMaterial({color:0x5a3b24, roughness:0.95}));
+  shield.position.y = 0.175;
+  g.add(shield);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55,1.7,2.3,24), hullMat);
+  body.position.y = 0.35 + 1.15;
+  g.add(body);
+  const win = new THREE.Mesh(new THREE.BoxGeometry(0.45,0.32,0.05), windowMat);
+  win.position.set(0, 1.45, 1.13); win.rotation.x = -0.46;
+  g.add(win);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.55,0.35,16), hullMat);
+  top.position.y = 2.825;
+  g.add(top);
+  g.userData.height = 3.0;
+  return g;
+}
+// launch escape tower: truss + solid motor, jettisoned once the air thins
+function buildLES(){
+  const g = new THREE.Group();
+  const trussMat = new THREE.MeshStandardMaterial({color:0xd24a2a, metalness:0.4, roughness:0.5});
+  for(let i=0;i<3;i++){
+    const a = i*Math.PI*2/3;
+    g.add(strut(new THREE.Vector3(Math.cos(a)*0.4,0,Math.sin(a)*0.4), new THREE.Vector3(Math.cos(a)*0.14,1.9,Math.sin(a)*0.14), 0.05, trussMat));
+  }
+  const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.28,1.5,14), hullMat);
+  motor.position.y = 2.65;
+  g.add(motor);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.28,0.7,14), trussMat);
+  nose.position.y = 3.75;
+  g.add(nose);
+  g.userData.height = 4.1;
+  return g;
+}
+function buildParachute(){
+  const g = new THREE.Group();
+  const canopyMat = new THREE.MeshStandardMaterial({color:0xff7a3d, roughness:0.85, side:THREE.DoubleSide});
+  const inner = new THREE.MeshStandardMaterial({color:0xf2efe8, roughness:0.85, side:THREE.DoubleSide});
+  const canopy = new THREE.Mesh(new THREE.SphereGeometry(6,20,8,0,Math.PI*2,0,Math.PI*0.42), canopyMat);
+  canopy.position.y = 7;
+  g.add(canopy);
+  const band = new THREE.Mesh(new THREE.SphereGeometry(6.02,20,2,0,Math.PI*2,Math.PI*0.3,Math.PI*0.06), inner);
+  band.position.y = 7;
+  g.add(band);
+  const lineMat = new THREE.MeshStandardMaterial({color:0xe8e8e8, roughness:0.8});
+  const rimY = 7 + 6*Math.cos(Math.PI*0.42), rimR = 6*Math.sin(Math.PI*0.42);
+  for(let i=0;i<10;i++){
+    const a = i*Math.PI*2/10;
+    g.add(strut(new THREE.Vector3(0,0,0), new THREE.Vector3(Math.cos(a)*rimR, rimY, Math.sin(a)*rimR), 0.03, lineMat));
+  }
+  return g;
+}
+
+const rocket = new THREE.Group();
+const stage1 = new THREE.Group();
+const stage2 = new THREE.Group();
+const stage3 = new THREE.Group();
+applyDesignVisual();
+
+// unmanned payload: fairing halves around a satellite
+const payload = new THREE.Group();
+const fairingL = buildFairingHalf(1);
+const fairingR = buildFairingHalf(-1);
+payload.add(fairingL, fairingR);
+payload.userData.height = 6.8;
+const satelliteMesh = buildSatellite();
+satelliteMesh.position.y = 1.6;
+satelliteMesh.visible = false;
+payload.add(satelliteMesh);
+
+// crewed payload: lander (legs stowed) under the return capsule, escape tower on top
+const crewPayload = new THREE.Group();
+const landerStowed = buildLander(false);
+crewPayload.add(landerStowed);
+const capsuleStowed = buildCapsule();
+capsuleStowed.position.y = landerStowed.userData.height;
+crewPayload.add(capsuleStowed);
+const LES_Y = landerStowed.userData.height + capsuleStowed.userData.height;
+const lesTower = buildLES();
+lesTower.position.y = LES_Y;
+crewPayload.add(lesTower);
+crewPayload.userData.height = LES_Y + lesTower.userData.height;
+
+let missionMode = 'unmanned';
+function activePayload(){ return missionMode==='manned' ? crewPayload : payload; }
+
+function restackRocket(){
+  // a segment that was previously flying debris carries stray world-space x/z and a spin
+  // from its ballistic tumble — reset the full transform, not just the stacking height.
+  let y = 0;
+  [stage1, stage2, stage3, payload, crewPayload].forEach(seg=>{
+    if(seg.parent===rocket){
+      seg.position.set(0, y, 0);
+      seg.rotation.set(0, 0, 0);
+      y += seg.userData.height;
+    }
+  });
+}
+rocket.add(stage1, stage2, stage3, payload);
+restackRocket();
+
+const flame1 = makeFlameSprite('rgba(255,150,60,0.9)');
+flame1.scale.set(4.5,9,4.5); flame1.position.set(0,-3.2,0); flame1.visible = false;
+stage1.add(flame1); flame1.userData.keep = true;
+const flame2 = makeFlameSprite('rgba(150,210,255,0.9)');
+flame2.scale.set(2.6,5.5,2.6); flame2.position.set(0,-0.6,0); flame2.visible = false;
+stage2.add(flame2); flame2.userData.keep = true;
+const flame3 = makeFlameSprite('rgba(180,225,255,0.9)');
+flame3.scale.set(1.4,2.8,1.4); flame3.position.set(0,-0.3,0); flame3.visible = false;
+stage3.add(flame3); flame3.userData.keep = true;
+
+const engineLight = new THREE.PointLight(0xffaa55, 0, 60);
+rocket.add(engineLight);
+scene.add(rocket);
+shadowify(payload, true, false); shadowify(crewPayload, true, false);
+
+/* RCS thruster puffs on the launch stack — opposite sides fire to roll the vessel */
+const rcsNoseL = makePuffSprite(); rcsNoseL.position.set(-2.4, 4, 0); stage3.add(rcsNoseL);
+const rcsNoseR = makePuffSprite(); rcsNoseR.position.set(2.4, 4, 0); stage3.add(rcsNoseR);
+const rcsTailL = makePuffSprite(); rcsTailL.position.set(-2.6, 0.5, 0); stage3.add(rcsTailL);
+const rcsTailR = makePuffSprite(); rcsTailR.position.set(2.6, 0.5, 0); stage3.add(rcsTailR);
+[rcsNoseL, rcsNoseR, rcsTailL, rcsTailR].forEach(p=>p.userData.keep = true);
+
+/* Lunar lander craft (legs deployed) */
+const landerCraft = buildLander(true);
+const landerFlame = makeFlameSprite('rgba(255,205,150,0.9)');
+landerFlame.position.set(0, -0.3, 0); landerFlame.visible = false;
+landerCraft.add(landerFlame);
+const landerPuffL = makePuffSprite(); landerPuffL.position.set(-2.2, 3.3, 0); landerCraft.add(landerPuffL);
+const landerPuffR = makePuffSprite(); landerPuffR.position.set(2.2, 3.3, 0); landerCraft.add(landerPuffR);
+const landerLight = new THREE.PointLight(0xffc27a, 0, 40);
+landerLight.position.set(0, 0.2, 0);
+landerCraft.add(landerLight);
+landerCraft.visible = false;
+scene.add(landerCraft);
+shadowify(landerCraft, true, false);
+
+/* Return capsule craft — plasma sheath ahead of the heat shield, parachute stowed above */
+const capsuleCraft = buildCapsule();
+const plasma = makeFlameSprite('rgba(255,120,50,0.9)');
+plasma.position.set(0, -0.7, 0); plasma.visible = false;
+capsuleCraft.add(plasma);
+const parachute = buildParachute();
+parachute.position.y = 3.0; parachute.visible = false;
+capsuleCraft.add(parachute);
+const capsulePuffL = makePuffSprite(); capsulePuffL.position.set(-1.3, 2.4, 0); capsuleCraft.add(capsulePuffL);
+const capsulePuffR = makePuffSprite(); capsulePuffR.position.set(1.3, 2.4, 0); capsuleCraft.add(capsulePuffR);
+const softFlame = makeFlameSprite('rgba(255,190,110,0.95)');
+softFlame.position.set(0, -0.6, 0); softFlame.visible = false; softFlame.userData.keep = true;
+capsuleCraft.add(softFlame);
+capsuleCraft.visible = false;
+scene.add(capsuleCraft);
+shadowify(capsuleCraft, true, false);
+
+/* falling debris — dropped stages, fairing halves, escape tower — one generic ballistic list */
+let debris = [];
+function spawnDebris(mesh, worldPos, worldRotZ, vx, vy, spin){
+  scene.remove(mesh);
+  mesh.position.copy(worldPos);
+  mesh.rotation.z = worldRotZ;
+  scene.add(mesh);
+  debris.push({mesh, alt:worldPos.y, range:worldPos.x, z:worldPos.z, vx, vy, vz:0, spin});
+}
+function clearDebris(){
+  debris.forEach(d=>scene.remove(d.mesh));
+  debris = [];
+}
+function worldPosOf(localObj){
+  // approximate world position ignoring small rocket roll — good enough for a separation flourish
+  let y = state.alt;
+  let obj = localObj;
+  while(obj && obj!==rocket){ y += obj.position.y; obj = obj.parent; }
+  return new THREE.Vector3(state.range, y, 0);
+}
+
+/* deployed satellite */
+let satellite = null;
+let satelliteVel = null;
+
+/* ---------- SMOKE ----------
+   A fixed pool of soft sprites recycled round-robin: exhaust trail while climbing through the air,
+   the steam cloud that boils out of the pad at ignition, LOX venting on the pad, dust at touchdown. */
+function makeSmokeTexture(){
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  for(let i=0;i<7;i++){
+    const x = 44 + Math.random()*40, y = 44 + Math.random()*40, r = 30 + Math.random()*26;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.85)');
+    g.addColorStop(0.55, 'rgba(255,255,255,0.4)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,128,128);
+  }
+  return new THREE.CanvasTexture(c);
+}
+const smokeTex = makeSmokeTexture();
+const SMOKE_N = 640;
+const smoke = [];
+for(let i=0;i<SMOKE_N;i++){
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({map:smokeTex, transparent:true, depthWrite:false, opacity:0}));
+  s.visible = false;
+  scene.add(s);
+  smoke.push({s, age:0, life:0, vx:0, vy:0, vz:0, size:0, grow:0, alpha:0, drag:0});
+}
+let smokeCursor = 0;
+function emitSmoke(x, y, z, vx, vy, vz, size, grow, life, alpha, color, drag){
+  const p = smoke[smokeCursor]; smokeCursor = (smokeCursor+1) % SMOKE_N;
+  p.s.position.set(x, y, z);
+  p.vx = vx; p.vy = vy; p.vz = vz;
+  p.size = size; p.grow = grow; p.life = life; p.age = 0; p.alpha = alpha; p.drag = drag||0.6;
+  p.s.material.color.setHex(color);
+  p.s.material.rotation = Math.random()*Math.PI*2;
+  p.s.scale.set(size, size, 1);
+  p.s.visible = true;
+}
+function updateSmoke(dt){
+  for(const p of smoke){
+    if(!p.s.visible) continue;
+    p.age += dt;
+    const k = p.age/p.life;
+    if(k>=1){ p.s.visible = false; continue; }
+    const damp = Math.max(0, 1 - p.drag*dt);
+    p.vx *= damp; p.vy *= damp; p.vz *= damp;
+    p.s.position.x += (p.vx + state.windX*0.5)*dt;
+    p.s.position.y = Math.max(0.5, p.s.position.y + p.vy*dt);
+    p.s.position.z += p.vz*dt;
+    const sz = p.size + p.grow*p.age;
+    p.s.scale.set(sz, sz, 1);
+    p.s.material.opacity = p.alpha * Math.min(1, p.age/0.12) * Math.pow(1-k, 1.4);
+  }
+}
+let smokeAcc = 0, ventAcc = 0;
+function clearSmoke(){ smoke.forEach(p=>p.s.visible = false); }
+// called from updateVisuals with real (unwarped) time
+function emitFlightSmoke(dt){
+  const s = state;
+  const air = s.scene==='lunar' ? 0 : airDensity(s.alt)/1.225;
+  if(s.scene==='launch' && (s.phase==='prelaunch' || s.phase==='countdown')){
+    ventAcc += dt;
+    while(ventAcc > 0.18){                                  // LOX boil-off venting from the upper tank
+      ventAcc -= 0.18;
+      const h = stage1.userData.height, r = DESIGN_FINISH[designKey].r[0];
+      emitSmoke(Math.sin(0.4)*r, h*0.92 + Math.random(), Math.cos(0.4)*r, 1.5+Math.random(), 0.6, 0.8, 1.2, 2.2, 3.2, 0.5, 0xf4f7fa, 0.4);
+    }
+  }
+  const burning = s.scene==='launch' && s.phase==='flight' && s.throttle>0 && currentThrust()>0;
+  if(burning && air>0.002){
+    const sinceLift = s.t - (s.liftoffT||0);
+    const ax = Math.sin(s.angle), ay = Math.cos(s.angle);
+    smokeAcc += dt*(26 + 30*Math.min(1, s.alt/2000));
+    while(smokeAcc>1){
+      smokeAcc -= 1;
+      const j = Math.random();
+      // exhaust trail: puffs left behind in the air, so the column stretches out below the climbing rocket
+      emitSmoke(s.range - ax*(5+j*6), s.alt - ay*(5+j*6), (Math.random()-0.5)*3,
+        -ax*18 + (Math.random()-0.5)*4, -ay*18 + (Math.random()-0.5)*4, (Math.random()-0.5)*4,
+        6 + j*3, 3.4 + air*2, 10 + Math.random()*4, 0.9*Math.pow(air, 0.35), 0xc8cac6, 2.4);
+    }
+    if(sinceLift < 7 && s.alt < 120){
+      // ground cloud: deluge steam rolling out across the hardstand and out of the flame trench
+      for(let i=0;i<4;i++){
+        const a = Math.random()*Math.PI*2, sp = 10 + Math.random()*16;
+        emitSmoke(Math.cos(a)*14, 3, Math.sin(a)*14, Math.cos(a)*sp, 2+Math.random()*4, Math.sin(a)*sp, 14, 5.5, 9, 0.75, 0xf2f4f5, 0.35);
+      }
+      emitSmoke((Math.random()-0.5)*8, 6, -100, (Math.random()-0.5)*6, 10+Math.random()*6, -22-Math.random()*10, 16, 6, 9, 0.8, 0xf2f4f5, 0.3);
+    }
+  }
+}
+
+/* explosions — expanding fireball + flying fragments on a hard impact */
+let explosions = [];
+function spawnExplosion(x,y,z){
+  const light = new THREE.PointLight(0xffcc55, 14, 140);
+  light.position.set(x,y+2,z);
+  scene.add(light);
+  const core = makeFlameSprite('rgba(255,230,170,0.95)');
+  core.position.set(x,y+2,z);
+  core.scale.set(3.5,3.5,3.5);
+  scene.add(core);
+  const fragMat = new THREE.MeshStandardMaterial({color:0x333a46, roughness:0.8});
+  const frags = [];
+  for(let i=0;i<10;i++){
+    const size = 0.5+Math.random()*0.9;
+    const f = new THREE.Mesh(new THREE.BoxGeometry(size,size,size), fragMat);
+    f.position.set(x,y+1,z);
+    scene.add(f);
+    const ang = Math.random()*Math.PI*2;
+    const spd = 6+Math.random()*15;
+    frags.push({mesh:f, vx:Math.cos(ang)*spd, vy:8+Math.random()*11, vz:Math.sin(ang)*spd, alt:y, range:x, z, spin:(Math.random()-0.5)*7});
+  }
+  explosions.push({light, core, frags, t:0, life:1.4});
+  sfxShot('explode');
+  activeCraft().visible = false;
+}
+
+/* ---------- FLIGHT MODEL ---------- */
+const G0 = 9.81;
+const EARTH_R = 6371000;
+const MOON_R = 1737000;
+const MOON_G = 1.62;
+const KARMAN = 100000;
+const FAIRING_JETTISON_ALT = 55000;
+const BASE_STAGES = {
+  stage1: {dryMass:20000, fuelMass:80000, thrust:1250000, burnRateMax:850},
+  stage2: {dryMass:5000, fuelMass:15000, thrust:300000, burnRateMax:160},
+  stage3: {dryMass:1400, fuelMass:3600, thrust:55000, burnRateMax:42},
+};
+const CFG = {
+  stage1: null, stage2: null, stage3: null, // filled from BASE_STAGES × the chosen design's multipliers
+  payloadMass: 250,
+  fairingMass: 350,
+  crewMass: 1200,
+  lesMass: 500,
+};
+const LANDER = {dry:2200, fuel:420, thrust:13000, burn:4.2};
+const LUNAR_START = {alt:1800, vx:14, vy:-32, angle:-0.12};
+const LUNAR_SAFE_SPEED = 6, LUNAR_SAFE_TILT = 25;
+const CAPSULE = {mass:5000, cdA:14, chuteCdA:900};
+const REENTRY_START = {alt:100000, vx:2400, vy:-500, range:-207000};
+const SOFT_LAND_ALT = 1.3, LAND_SAFE_SPEED = 8;
+const HEAT_K = 1.2e-11;
+const CHUTE_MAX_ALT = 8000, CHUTE_MAX_SPEED = 300;
+const REENTRY_SAFE_SPEED = 15;
+const AERO_WARN = 6000, AERO_LIMIT = 9000;   // Pa of q·sin(angle of attack)
+function soundSpeed(h){
+  if(h<11000) return 340.3 - 0.0041*h;
+  if(h<20000) return 295.2;
+  return Math.min(330, 295.2 + 0.001*(h-20000));
+}
+const EARTH_SAFE_SPEED = 10;
+
+let state = null;
+function freshState(){
+  return {
+    scene:'launch', // launch → (manned) lunar → reentry
+    phase:'prelaunch', // prelaunch, countdown, flight, coast, descending, reentry, landed, success, failed, crash
+    countdown:10,
+    t:0,
+    alt:0, range:0,
+    vy:0, vx:0,
+    angle:0, // radians from vertical, + tips toward +range. Full rotation possible if control is lost.
+    angularVel:0, // rad/s — attitude carries momentum, RCS jets only accelerate it
+    rcsInput:0,
+    throttle:0,
+    stageIndex:1,
+    fuel1: CFG.stage1.fuelMass,
+    fuel2: CFG.stage2.fuelMass,
+    fuel3: CFG.stage3.fuelMass,
+    landerFuel: LANDER.fuel,
+    lunarLanded:false,
+    shield:1, chute:'stowed', chuteT:0, heatRate:0, misalign:0,
+    apo: 0,
+    peakAlt: 0,
+    gforce:0,
+    liftedOff:false,
+    engineCutoff:false,
+    mecoDone:false,
+    fairingJettisoned:false,
+    satelliteDeployed:false,
+    windX:0, windTarget:0, windTimer:2, gustFlash:0,
+    retroHold:false,
+    lastSpokenCount:null,
+    called:{}, blackout:false,
+    liftoffT:0, mach:0, q:0, aeroLoad:0, stress:0, loadWarn:false,
+    softFired:false, softFlash:0, softBurn:0,
+  };
+}
+applyDesignStats();
+state = freshState();
+
+function activeCraft(){
+  return state.scene==='lunar' ? landerCraft : state.scene==='reentry' ? capsuleCraft : rocket;
+}
+function currentMass(){
+  if(state.scene==='lunar') return LANDER.dry + state.landerFuel;
+  if(state.scene==='reentry') return CAPSULE.mass;
+  const manned = missionMode==='manned';
+  let m = manned ? CFG.crewMass : CFG.payloadMass;
+  if(!state.fairingJettisoned) m += manned ? CFG.lesMass : CFG.fairingMass;
+  if(state.stageIndex<=3) m += CFG.stage3.dryMass + state.fuel3;
+  if(state.stageIndex<=2) m += CFG.stage2.dryMass + state.fuel2;
+  if(state.stageIndex<=1) m += CFG.stage1.dryMass + state.fuel1;
+  return m;
+}
+function currentThrust(){
+  if(state.stageIndex===1) return state.fuel1>0 ? CFG.stage1.thrust : 0;
+  if(state.stageIndex===2) return state.fuel2>0 ? CFG.stage2.thrust : 0;
+  if(state.stageIndex===3){
+    if(state.engineCutoff) return 0;
+    return state.fuel3>0 ? CFG.stage3.thrust : 0;
+  }
+  return 0;
+}
+
+function airDensity(y){
+  if(state.scene==='lunar' || y>120000) return 0;
+  return 1.225*Math.exp(-Math.max(y,0)/8500);
+}
+function gravityAt(y){
+  if(state.scene==='lunar'){
+    const r = MOON_R+Math.max(y,0);
+    return MOON_G*(MOON_R/r)*(MOON_R/r);
+  }
+  const r = EARTH_R+Math.max(y,0);
+  return G0*(EARTH_R/r)*(EARTH_R/r);
+}
+function wrapAngle(a){
+  while(a>Math.PI) a -= Math.PI*2;
+  while(a<-Math.PI) a += Math.PI*2;
+  return a;
+}
+
+const keys = {};
+window.addEventListener('keydown', e=>{
+  if(e.target && e.target.tagName==='SELECT') return;
+  keys[e.code]=true;
+  if(e.code==='Space'){ e.preventDefault(); handleIgnitionKey(); }
+  if(e.code==='KeyX'){ tryStageSep(); }
+  if(e.code==='KeyC'){ tryEngineCutoff(); }
+  if(e.code==='KeyB'){ toggleRetro(); }
+  if(e.code==='KeyV'){ tryContextAction(); }
+  if(e.code==='KeyR'){ resetSim(); }
+});
+window.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+function handleIgnitionKey(){
+  if(state.phase==='prelaunch') startCountdown();
+}
+function startCountdown(){
+  state.phase='countdown';
+  state.countdown=10;
+  state.lastSpokenCount=null;
+  audio();
+  ensureSfx();
+  setStatus('점화 시퀀스 진행 중', 'warn');
+}
+
+/* ---------- LAUNCH CONTROL VOICE ---------- */
+// Prefer a natural-sounding US male voice (neural "Natural"/"Online" voices first, then the
+// enhanced system voices), delivered a touch slower and lower — the calm cadence of a launch commentator.
+const hasSpeech = 'speechSynthesis' in window;
+const VOICE_KEY = 'ignition.voice';
+// natural male narrators first; if the machine has none, a natural US voice beats a robotic male one
+const VOICE_RANK = [
+  {re:/(Andrew|Guy|Davis|Brian|Christopher|Eric|Roger|Steffan|Jason|Tony).*(Natural|Online)/i, male:true},
+  {re:/(Natural|Online).*(Andrew|Guy|Davis|Brian|Christopher|Eric|Roger|Steffan)/i, male:true},
+  {re:/\b(Evan|Nathan|Tom|Aaron|Alex|Noah)\b/i, male:true},
+  {re:/Google US English/i, male:false},
+  {re:/Microsoft (David|Mark)/i, male:true},
+  {re:/^Samantha/i, male:false},
+];
+// sound-effect and joke voices never belong on a launch loop
+const NOVELTY_VOICE = /^(Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Good News|Jester|Junior|Organ|Superstar|Trinoids|Whisper|Wobble|Zarvox)\b/i;
+let autoIsMale = false;
+let voiceChoice = 'auto';
+try{ voiceChoice = localStorage.getItem(VOICE_KEY) || 'auto'; }catch(e){}
+let englishVoices = [];
+let autoVoice = null;
+function loadVoices(){
+  if(!hasSpeech) return;
+  const all = speechSynthesis.getVoices();
+  englishVoices = all.filter(v=>/^en[-_]US/i.test(v.lang) && !NOVELTY_VOICE.test(v.name));
+  if(!englishVoices.length) englishVoices = all.filter(v=>/^en/i.test(v.lang) && !NOVELTY_VOICE.test(v.name));
+  autoVoice = null; autoIsMale = false;
+  for(const r of VOICE_RANK){
+    autoVoice = englishVoices.find(v=>r.re.test(v.name));
+    if(autoVoice){ autoIsMale = r.male; break; }
+  }
+  if(!autoVoice) autoVoice = englishVoices[0] || null;
+  renderVoiceSelect();
+}
+function currentVoice(){
+  if(voiceChoice==='auto') return autoVoice;
+  return englishVoices.find(v=>v.name===voiceChoice) || autoVoice;
+}
+function renderVoiceSelect(){
+  const sel = document.getElementById('voice-select');
+  if(!sel) return;
+  if(!hasSpeech){ sel.innerHTML = '<option>이 브라우저는 음성 미지원</option>'; sel.disabled = true; return; }
+  sel.innerHTML = '';
+  const add = (value, label)=>{ const o = document.createElement('option'); o.value = value; o.textContent = label; sel.appendChild(o); };
+  add('auto', '자동' + (autoVoice ? ' · '+autoVoice.name.replace(/Microsoft |Online |\(Natural\)|- English \(United States\)/g,'').trim() : ''));
+  englishVoices.forEach(v=>add(v.name, v.name));
+  add('off', '음성 끄기');
+  sel.value = [...sel.options].some(o=>o.value===voiceChoice) ? voiceChoice : 'auto';
+  document.getElementById('voice-note').hidden = autoIsMale;
+}
+if(hasSpeech){
+  loadVoices();
+  speechSynthesis.addEventListener('voiceschanged', loadVoices);
+}
+
+let audioCtx = null;
+function audio(){
+  if(!audioCtx){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(AC) audioCtx = new AC();
+  }
+  if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+  return audioCtx;
+}
+// Quindar tones: the short beeps that bracket NASA air-to-ground transmissions (2525 Hz in, 2475 Hz out)
+function quindar(freq){
+  const c = audio();
+  if(!c || voiceChoice==='off') return;
+  const o = c.createOscillator(), g = c.createGain(), t = c.currentTime;
+  o.type = 'sine'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.06, t+0.01);
+  g.gain.setValueAtTime(0.06, t+0.22);
+  g.gain.linearRampToValueAtTime(0, t+0.25);
+  o.connect(g); g.connect(c.destination);
+  o.start(t); o.stop(t+0.27);
+}
+function utter(text){
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'en-US';
+  const v = currentVoice();
+  if(v) u.voice = v;
+  u.rate = 0.96;
+  u.pitch = 0.86;
+  u.volume = 1;
+  return u;
+}
+// countdown numbers: cut whatever is still playing so the count stays on the second
+function speak(text){
+  if(!hasSpeech || voiceChoice==='off') return;
+  speechSynthesis.cancel();
+  speechSynthesis.speak(utter(text));
+}
+// status call-outs: queued, bracketed by Quindar tones like a real loop transmission
+function callout(text){
+  if(!hasSpeech || voiceChoice==='off') return;
+  const u = utter(text);
+  u.onstart = ()=>quindar(2525);
+  u.onend = ()=>quindar(2475);
+  speechSynthesis.speak(u);
+}
+function callOnce(key, text){
+  if(state.called[key]) return;
+  state.called[key] = true;
+  callout(text);
+}
+const COUNT_WORDS = {10:'T-minus ten.', 9:'Nine.', 8:'Eight.', 7:'Seven.', 6:'Six.', 5:'Five.', 4:'Four.', 3:'Three.', 2:'Two.', 1:'One.'};
+/* ---------- ENGINE SOUND (synthesised, no audio files) ----------
+   One looping noise bed split two ways: a low-passed rumble, and a band-passed "crackle" whose
+   gain is jittered by slow noise — the ragged tearing of a big rocket plume. Everything runs
+   through one master gain and a tone filter that the flight state drives every frame. */
+const SFX_KEY = 'ignition.sfx';
+let sfxOn = true;
+try{ sfxOn = localStorage.getItem(SFX_KEY)!=='off'; }catch(e){}
+let sfx = null;
+function makeNoiseBuffer(c, seconds){
+  const n = Math.floor(c.sampleRate*seconds);
+  const b = c.createBuffer(1, n, c.sampleRate);
+  const d = b.getChannelData(0);
+  let brown = 0;
+  for(let i=0;i<n;i++){
+    const w = Math.random()*2-1;
+    brown = (brown + 0.02*w)/1.02;
+    d[i] = w*0.35 + brown*3.2;
+  }
+  return b;
+}
+function ensureSfx(){
+  if(sfx) return sfx;
+  const c = audio();
+  if(!c) return null;
+  const buf = makeNoiseBuffer(c, 4);
+  const src = c.createBufferSource(); src.buffer = buf; src.loop = true;
+  const low = c.createBiquadFilter(); low.type = 'lowpass'; low.frequency.value = 210; low.Q.value = 0.9;
+  const mid = c.createBiquadFilter(); mid.type = 'bandpass'; mid.frequency.value = 750; mid.Q.value = 0.6;
+  const crackle = c.createGain(); crackle.gain.value = 0.32;
+  const modSrc = c.createBufferSource(); modSrc.buffer = buf; modSrc.loop = true; modSrc.playbackRate.value = 0.41;
+  const modLp = c.createBiquadFilter(); modLp.type = 'lowpass'; modLp.frequency.value = 28;
+  const modDepth = c.createGain(); modDepth.gain.value = 0.55;
+  modSrc.connect(modLp); modLp.connect(modDepth); modDepth.connect(crackle.gain);
+  const engine = c.createGain(); engine.gain.value = 0;
+  const tone = c.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 2600;
+  const comp = c.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 4;
+  src.connect(low); low.connect(engine);
+  src.connect(mid); mid.connect(crackle); crackle.connect(engine);
+  engine.connect(tone); tone.connect(comp); comp.connect(c.destination);
+  src.start(); modSrc.start();
+  sfx = {c, buf, engine, tone, out:comp};
+  return sfx;
+}
+// one-shot thumps and bursts: ignition, staging, explosion, parachute
+const SHOTS = {
+  ignite:  {f:600,  end:70, peak:1.0, dur:2.6},
+  sep:     {f:1300, end:90, peak:1.1, dur:0.7},
+  explode: {f:900,  end:60, peak:1.5, dur:3.0},
+  chute:   {f:2600, end:300, peak:0.28, dur:0.7},
+  retro:   {f:2200, end:160, peak:0.9, dur:0.8},
+};
+function sfxShot(kind){
+  if(!sfxOn) return;
+  const s = ensureSfx();
+  if(!s) return;
+  const p = SHOTS[kind], c = s.c, t = c.currentTime;
+  const src = c.createBufferSource(); src.buffer = s.buf;
+  const lp = c.createBiquadFilter(); lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(p.f, t);
+  lp.frequency.exponentialRampToValueAtTime(p.end, t+p.dur);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(p.peak, t+0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+p.dur);
+  src.connect(lp); lp.connect(g); g.connect(s.out);
+  src.start(t, Math.random()*2);
+  src.stop(t+p.dur+0.05);
+}
+function updateAudio(){
+  if(!sfx) return;
+  const s = state, t = sfx.c.currentTime;
+  let level = 0;
+  if(sfxOn){
+    if(s.phase==='countdown' && s.countdown<=1.2){
+      level = 0.4*(1 - s.countdown/1.2);                       // turbopumps spooling up
+    } else if(s.scene==='launch' && s.phase==='flight'){
+      const thrust = currentThrust()*s.throttle;
+      if(thrust>0) level = Math.min(1, 0.3 + 0.7*Math.pow(thrust/CFG.stage1.thrust, 0.35));
+    } else if(s.scene==='lunar' && s.phase==='flight'){
+      level = s.landerFuel>0 ? 0.42*s.throttle : 0;
+    } else if(s.scene==='reentry' && s.phase==='reentry'){
+      level = Math.min(0.8, s.heatRate/5e8) + (s.chute==='open' ? 0.05 : 0.12*Math.min(1, Math.hypot(s.vx, s.vy)/300));
+    }
+  }
+  // thin air carries less sound: quieter and duller with altitude; a floor stays for what you'd feel through the hull
+  const air = s.scene==='lunar' ? 0 : airDensity(s.alt)/1.225;
+  level *= 0.22 + 0.78*Math.pow(air, 0.3);
+  level *= Math.min(1.1, 1.45/(1 + smoothDist/110));           // nearer camera, louder
+  sfx.engine.gain.setTargetAtTime(level, t, 0.07);
+  sfx.tone.frequency.setTargetAtTime(350 + 2500*Math.pow(air, 0.4), t, 0.25);
+}
+
+
+/* ---------- LAUNCH ACTIONS ---------- */
+function canStageSep(){
+  const s = state;
+  return s.scene==='launch' && (s.phase==='flight'||s.phase==='coast') &&
+    ((s.stageIndex===1 && s.fuel1<=1) || (s.stageIndex===2 && s.fuel2<=1));
+}
+function tryStageSep(){
+  if(canStageSep()) separateStage(state.stageIndex);
+}
+function separateStage(which){
+  const outgoing = which===1 ? stage1 : stage2;
+  const pos = worldPosOf(outgoing);
+  spawnDebris(outgoing, pos, rocket.rotation.z, state.vx*0.9, state.vy*0.6, (Math.random()-0.5)*0.6);
+  rocket.remove(outgoing);
+  restackRocket();
+  state.stageIndex = which+1;
+  if(which===1) flame1.visible=false; else flame2.visible=false;
+  sfxShot('sep');
+  callout(which===1 ? 'Booster separation confirmed.' : 'Second stage separation. Third stage is go.');
+}
+
+function jettisonFairing(){
+  state.fairingJettisoned = true;
+  if(missionMode==='manned'){
+    const pos = worldPosOf(lesTower);
+    crewPayload.remove(lesTower);
+    spawnDebris(lesTower, pos, rocket.rotation.z, state.vx + 6, state.vy*0.5 + 8, 0.9);
+    callout('Launch escape tower jettison.');
+    return;
+  }
+  [fairingL, fairingR].forEach(half=>{
+    const pos = worldPosOf(half);
+    payload.remove(half);
+    const side = half.userData.side;
+    spawnDebris(half, pos, rocket.rotation.z, state.vx + side*9, state.vy*0.4 + 3, side*1.2);
+  });
+  satelliteMesh.visible = true;
+  sfxShot('sep');
+  callout('Payload fairing separation.');
+}
+
+function canEngineCutoff(){
+  const s = state;
+  return s.scene==='launch' && s.stageIndex===3 && !s.engineCutoff &&
+    (s.phase==='flight'||s.phase==='coast'||s.phase==='descending');
+}
+function canReignite(){
+  const s = state;
+  return s.scene==='launch' && s.stageIndex===3 && s.engineCutoff && s.fuel3>0 &&
+    (s.phase==='coast'||s.phase==='descending');
+}
+function reignite(throttle){
+  state.engineCutoff = false;
+  state.throttle = Math.max(state.throttle, throttle);
+  state.phase = 'flight';
+  setStatus('엔진 재점화 — 동력 비행 중','warn');
+  callout('Engine relight. We have good thrust.');
+}
+function tryEngineCutoff(){
+  if(canReignite()){ reignite(0.5); return; }
+  if(!canEngineCutoff()) return;
+  state.engineCutoff = true;
+  state.mecoDone = true;
+  state.throttle = 0;
+  setStatus('엔진 정지 완료 (MECO)','warn');
+  callout('Main engine cutoff.');
+}
+
+/* retrograde hold — autopilot points the engine opposite the velocity (upright when nearly stopped) */
+function retroTarget(){
+  const v = Math.hypot(state.vx, state.vy);
+  return v>0.5 ? Math.atan2(-state.vx, -state.vy) : 0;
+}
+function canRetro(){
+  const s = state;
+  const live = s.phase==='flight'||s.phase==='coast'||s.phase==='descending'||(s.phase==='reentry' && s.chute!=='open');
+  return s.liftedOff && live;
+}
+function toggleRetro(){
+  if(!canRetro()) return;
+  state.retroHold = !state.retroHold;
+}
+
+function payloadReady(){
+  const s = state;
+  return s.scene==='launch' && s.stageIndex===3 && s.engineCutoff && s.fairingJettisoned &&
+    (s.phase==='coast'||s.phase==='descending');
+}
+
+function deploySatellite(){
+  state.satelliteDeployed = true;
+  satellite = satelliteMesh;
+  const pos = worldPosOf(satellite);
+  payload.remove(satellite);
+  satellite.position.copy(pos);
+  satellite.rotation.z = -state.angle;
+  scene.add(satellite);
+  const success = state.alt >= KARMAN;
+  satelliteVel = {
+    vx:state.vx, vy:state.vy, alt:state.alt, range:state.range,
+    z:0, vz: (Math.random()<0.5?-1:1)*2.4,
+    orbit: success,
+  };
+  if(success){
+    state.phase='success';
+    centerMsg('위성 분리 성공', '궤도 진입 확인 · 고도 '+(state.alt/1000).toFixed(1)+' KM', 'good');
+    setStatus('궤도 안착','go');
+    callout('Spacecraft separation confirmed. The satellite is flying on its own.');
+  } else {
+    state.phase='failed';
+    callout('Separation below orbital altitude. The payload will reenter.');
+    centerMsg('궤도 미달 분리', '위성 재진입 예상 · 고도 '+(state.alt/1000).toFixed(1)+' KM', 'bad');
+    setStatus('임무 실패','bad');
+  }
+}
+
+function separateLander(){
+  if(state.alt < KARMAN){
+    state.phase='failed';
+    centerMsg('궤도 미달 — 달 전이 불가', '분리 고도 '+(state.alt/1000).toFixed(1)+' KM · 100 KM 이상에서 분리하세요', 'bad');
+    setStatus('임무 실패','bad');
+    callout('Negative on lander separation. We are below orbit.');
+    return;
+  }
+  enterLunar();
+}
+
+/* ---------- LUNAR DESCENT ---------- */
+function enterLunar(){
+  clearDebris();
+  Object.assign(state, {
+    scene:'lunar', phase:'flight',
+    alt:LUNAR_START.alt, range:0, vx:LUNAR_START.vx, vy:LUNAR_START.vy,
+    angle:LUNAR_START.angle, angularVel:0, throttle:0,
+    landerFuel:LANDER.fuel, engineCutoff:false, apo:LUNAR_START.alt, peakAlt:LUNAR_START.alt,
+    windX:0, windTarget:0, gustFlash:0, gforce:0,
+  });
+  landerCraft.rotation.set(0,0,0);
+  applySceneLook();
+  snapCamera();
+  centerMsg('달 착륙 하강 시작', '달 전이 완료 · 고도 1.8 KM · B로 역추진 자세를 켜고 W로 감속하세요', 'info', 4500);
+  setStatus('달 하강 중','warn');
+  callout('Lander separation confirmed. You are go for powered descent.');
+}
+function stepLunar(dt){
+  const m = LANDER.dry + state.landerFuel;
+  const thrust = (state.landerFuel>0 ? LANDER.thrust : 0)*state.throttle;
+  if(thrust>0) state.landerFuel = Math.max(0, state.landerFuel - LANDER.burn*state.throttle*dt);
+  const g = gravityAt(state.alt);
+  const ax = thrust/m*Math.sin(state.angle);
+  const ay = thrust/m*Math.cos(state.angle) - g;
+  state.vx += ax*dt;
+  state.vy += ay*dt;
+  state.alt += state.vy*dt;
+  state.range += state.vx*dt;
+  state.gforce = Math.hypot(ax, ay+g)/G0;
+  state.apo = state.vy>0 ? state.alt + state.vy*state.vy/(2*g) : Math.max(state.alt, 0);
+  if(state.alt<500) callOnce('l500', 'Five hundred meters.');
+  if(state.alt<100) callOnce('l100', 'One hundred meters. Looking good.');
+  if(state.alt<25) callOnce('l25', 'Twenty five meters. Kicking up some dust.');
+  if(state.landerFuel < LANDER.fuel*0.2) callOnce('lfuel', 'Fuel is getting low.');
+
+  if(state.alt<=0){
+    state.alt = 0;
+    const impact = Math.hypot(state.vx, state.vy);
+    const tilt = Math.abs(state.angle)*180/Math.PI;
+    if(impact<LUNAR_SAFE_SPEED && tilt<LUNAR_SAFE_TILT){
+      state.phase='landed';
+      state.lunarLanded = true;
+      state.angularVel = 0;
+      state.throttle = 0;
+      centerMsg('달 착륙 성공', '착지 속도 '+impact.toFixed(1)+' M/S · 귀환 출발을 누르세요', 'good');
+      setStatus('달 착륙 완료','go');
+      callout('Contact light. Houston, the Eagle has landed.');
+    } else if(impact<LUNAR_SAFE_SPEED){
+      crashOut(impact, '착륙선 전복', '착지 각도 '+tilt.toFixed(0)+'° · '+LUNAR_SAFE_TILT+'° 이내로 세워서 내리세요');
+    } else {
+      crashOut(impact, '착륙선 파괴', '달 표면 충돌 · '+impact.toFixed(1)+' M/S · '+LUNAR_SAFE_SPEED+' M/S 이하로 착지하세요');
+    }
+    state.vx = 0; state.vy = 0;
+  }
+}
+
+/* ---------- EARTH REENTRY ---------- */
+function enterReentry(){
+  Object.assign(state, {
+    scene:'reentry', phase:'reentry',
+    alt:REENTRY_START.alt, range:REENTRY_START.range, vx:REENTRY_START.vx, vy:REENTRY_START.vy, softFired:false, softFlash:0,
+    angularVel:0, throttle:0, shield:1, chute:'stowed', chuteT:0, heatRate:0,
+    apo:REENTRY_START.alt, peakAlt:REENTRY_START.alt,
+    windX:0, windTarget:0, gustFlash:0, gforce:0,
+  });
+  state.angle = Math.atan2(-state.vx, -state.vy) + 0.18;
+  state.misalign = 0.18;
+  capsuleCraft.rotation.set(0,0,0);
+  parachute.visible = false;
+  applySceneLook();
+  snapCamera();
+  centerMsg('대기권 재진입', '열차폐(바닥)를 진행 방향으로 유지 · 8 KM·300 M/S 이하에서 낙하산을 직접 펴세요 (텔레메트리에 표시)', 'info', 5500);
+  setStatus('대기권 재진입 중','warn');
+  callout('Entry interface. Expect loss of signal during peak heating.');
+}
+function chuteSafe(){
+  return state.alt<=CHUTE_MAX_ALT && Math.hypot(state.vx, state.vy)<=CHUTE_MAX_SPEED;
+}
+function openChute(){
+  sfxShot('chute');
+  state.chute = 'open';
+  state.chuteT = 0;
+  setStatus('낙하산 전개 — 하강 중','warn');
+  callout('Main chutes deployed. We have good chutes.');
+}
+function chuteBlockReason(){
+  const sp = Math.hypot(state.vx, state.vy);
+  if(state.alt>CHUTE_MAX_ALT) return '고도 '+(state.alt/1000).toFixed(1)+' KM — 8 KM 이하에서 펴세요';
+  if(sp>CHUTE_MAX_SPEED) return '속도 '+sp.toFixed(0)+' M/S — 300 M/S 이하에서 펴세요';
+  return '';
+}
+function closeChute(){
+  state.chute = 'stowed';
+  setStatus('낙하산 접힘 — 자유 낙하','warn');
+  callout('Chutes released.');
+}
+// fully manual: the player opens and closes the canopy; opening it outside the envelope shreds it
+function toggleChute(){
+  if(state.chute==='open'){ closeChute(); return; }
+  if(state.chute!=='stowed') return;
+  if(chuteSafe()){ openChute(); return; }
+  state.chute = 'torn';
+  centerMsg('낙하산 파손', chuteBlockReason(), 'bad', 3500);
+  setStatus('낙하산 파손','bad');
+  callout('Chute failure. Chute failure.');
+}
+function stepReentry(dt, rho, windEff){
+  const m = CAPSULE.mass;
+  const g = gravityAt(state.alt);
+  const vxRel = state.vx - windEff;
+  const speed = Math.hypot(vxRel, state.vy);
+  let cdA = CAPSULE.cdA;
+  if(state.chute==='open'){
+    state.chuteT += dt;
+    const k = Math.min(1, state.chuteT/10);
+    cdA = CAPSULE.cdA + (CAPSULE.chuteCdA-CAPSULE.cdA)*k*k; // reefed opening, not an instant snatch
+  } else if(state.chute==='torn'){
+    cdA = CAPSULE.cdA*1.4;
+  }
+  const drag = 0.5*rho*speed*speed*cdA;
+  const ax = speed>0.01 ? -drag*(vxRel/speed)/m : 0;
+  const ay = -g + (speed>0.01 ? -drag*(state.vy/speed)/m : 0);
+  state.vx += ax*dt;
+  state.vy += ay*dt;
+  if(state.softBurn>0){                       // retros still burning: hold the sink rate right down to contact
+    state.softBurn -= dt;
+    if(state.vy < -1.3) state.vy = -1.3;
+    state.vx *= Math.max(0, 1 - 6*dt);
+  }
+  state.alt += state.vy*dt;
+  state.range += state.vx*dt;
+  state.gforce = Math.hypot(ax, ay+g)/G0;
+  state.apo = Math.max(state.alt, 0);
+  state.q = 0.5*rho*speed*speed;
+  state.mach = speed/soundSpeed(state.alt);
+  state.aeroLoad = 0;
+  // soft-landing engines: a gamma-ray altimeter under the heat shield fires a ring of solid retros
+  // about a metre up, taking the last few m/s off a parachute descent. Not used over water.
+  if(state.chute==='open' && !state.softFired && state.alt < SOFT_LAND_ALT && state.vy < -2 && !isOcean(state.range, 0)){
+    state.softFired = true;
+    state.softFlash = 0.45;
+    state.softBurn = 2.0;
+    state.vy = -1.3;
+    state.vx *= 0.3;
+    sfxShot('retro');
+    callout('Soft landing engines.');
+    for(let i=0;i<22;i++){
+      const a = Math.random()*Math.PI*2, sp = 8 + Math.random()*10;
+      emitSmoke(state.range + Math.cos(a)*2, 1, Math.sin(a)*2, Math.cos(a)*sp, 1+Math.random()*2, Math.sin(a)*sp, 2.5, 3.5, 3.5, 0.75, 0xb9a882, 0.9);
+    }
+  }
+
+  state.misalign = wrapAngle(state.angle - Math.atan2(-state.vx, -state.vy));
+  if(state.chute==='open'){
+    // hangs straight under the canopy
+    state.angularVel = 0;
+    state.angle *= 1 - Math.min(1, dt*0.8);
+    state.heatRate = 0;
+  } else {
+    const v = Math.hypot(state.vx, state.vy);
+    state.heatRate = Math.sqrt(rho)*v*v*v;
+    // a shield turned off the velocity vector exposes the hull — heating climbs fast
+    const s = Math.sin(state.misalign);
+    state.shield -= HEAT_K*state.heatRate*(1+4*s*s)*dt;
+    // plasma blackout: the sheath cuts the radio at peak heating, contact returns once it thins
+    if(!state.blackout && !state.called.los && state.heatRate>2.5e8){ state.blackout = true; state.called.los = true; setStatus('통신 두절 — 최대 가열','warn'); }
+    if(state.blackout && state.heatRate<8e7){ state.blackout = false; setStatus('대기권 재진입 중','warn'); callOnce('aos', 'Signal reacquired. Good to hear your voice.'); }
+    if(state.shield<=0){
+      state.shield = 0;
+      crashOut(0, '귀환선 소실', '열차폐 한계 초과 · 고도 '+(state.alt/1000).toFixed(1)+' KM · 열차폐를 진행 방향으로 유지하세요');
+      setStatus('귀환선 소실','bad');
+      return;
+    }
+  }
+
+  if(state.alt<=0){
+    state.alt = 0;
+    // graded on vertical touchdown speed; sideways drift is just the wind carrying the canopy
+    const impact = Math.abs(state.vy);
+    const sea = isOcean(state.range, 0);
+    if(state.chute==='open' && (sea ? impact<REENTRY_SAFE_SPEED : impact<LAND_SAFE_SPEED)){
+      state.phase='success';
+      const soft = !sea && impact < 3;
+      centerMsg(sea ? '대서양 착수 성공' : soft ? '연착륙 성공' : '착지 성공 · 거친 충격',
+        '승무원 무사 귀환 · '+(sea ? '착수' : '착지')+' 속도 '+impact.toFixed(1)+' M/S'+(!sea && state.softFired ? ' · 역추진 점화' : ''), 'good');
+      setStatus('임무 완료','go');
+      callout(sea ? 'Splashdown. Welcome home.' : 'Touchdown. Welcome home.');
+    } else {
+      crashOut(impact, '귀환선 파괴', '충돌 속도 '+impact.toFixed(0)+' M/S'+(state.chute==='open'?'':' · 낙하산 없이 착지'));
+    }
+    state.vx = 0; state.vy = 0;
+  }
+}
+
+/* ---------- CONTEXT ACTION (V) — one button that follows the mission ---------- */
+function contextAction(){
+  const s = state;
+  if(missionMode==='unmanned'){
+    return {label:'위성 분리', enabled: payloadReady() && !s.satelliteDeployed, run: deploySatellite};
+  }
+  if(s.scene==='launch') return {label:'착륙선 분리', enabled: payloadReady(), run: separateLander};
+  if(s.scene==='lunar') return {label:'귀환 출발', enabled: s.lunarLanded && s.phase==='landed', run: enterReentry};
+  if(s.chute==='open') return {label:'낙하산 접기', enabled: s.phase==='reentry', run: toggleChute};
+  if(s.chute==='torn') return {label:'낙하산 파손', enabled:false, run: toggleChute};
+  return {label:'낙하산 펴기', enabled: s.phase==='reentry', run: toggleChute};
+}
+function tryContextAction(){
+  const c = contextAction();
+  if(c.enabled) c.run();
+}
+
+function crashOut(impact, title, sub, voice){
+  state.phase='crash';
+  callout(voice || (state.scene==='launch' ? 'We have lost the vehicle.' : 'We have lost the spacecraft.'));
+  centerMsg(title||'기체 파괴', sub||('충돌 속도 '+impact.toFixed(0)+' M/S'), 'bad');
+  setStatus('추락','bad');
+  spawnExplosion(state.range, Math.max(0,state.alt), 0);
+}
+
+function setStatus(text, cls){
+  const el = document.getElementById('status-tag');
+  el.textContent = text;
+  el.className = cls||'';
+}
+let msgTimer = null;
+function centerMsg(big, sub, cls, ttl){
+  const el = document.getElementById('centermsg');
+  document.getElementById('centermsg-big').textContent = big;
+  document.getElementById('centermsg-sub').textContent = sub||'';
+  el.className = cls?('show '+cls):'show';
+  clearTimeout(msgTimer);
+  if(ttl) msgTimer = setTimeout(clearCenterMsg, ttl);
+}
+function clearCenterMsg(){
+  clearTimeout(msgTimer);
+  document.getElementById('centermsg').className='';
+}
+
+/* scene dressing — which world, which craft */
+function applySceneLook(){
+  const moon = state.scene==='lunar';
+  groundMat.map = moon ? moonGroundTex : earthGroundTex;
+  groundMat.color.set(moon ? 0xc4c4c2 : 0xffffff);
+  groundMat.needsUpdate = true;
+  padGroup.visible = state.scene==='launch';
+  spaceport.visible = !moon;
+  buildings.visible = !moon;
+  coast.visible = !moon;
+  cloudGroup.visible = !moon;
+  craters.visible = moon;
+  moonHills.visible = moon;
+  earthSky.visible = moon;
+  rocket.visible = state.scene==='launch';
+  landerCraft.visible = state.scene==='lunar';
+  capsuleCraft.visible = state.scene==='reentry';
+}
+
+function setMode(m){
+  if(state.phase!=='prelaunch' || m===missionMode) return;
+  missionMode = m;
+  resetSim();
+}
+
+function applyDesignStats(){
+  const m = DESIGNS[designKey].mult;
+  for(const k of ['stage1','stage2','stage3']){
+    const b = BASE_STAGES[k];
+    // same engine efficiency across designs: burn rate scales with thrust
+    CFG[k] = {dryMass:b.dryMass*m.d, fuelMass:b.fuelMass*m.f, thrust:b.thrust*m.t, burnRateMax:b.burnRateMax*m.t};
+  }
+}
+function setDesign(key){
+  if(state.phase!=='prelaunch' || key===designKey || !DESIGNS[key]) return;
+  designKey = key;
+  try{ localStorage.setItem(DESIGN_KEY, key); }catch(e){}
+  applyDesignVisual();
+  resetSim();
+}
+function resetSim(){
+  if(hasSpeech) speechSynthesis.cancel();
+  applyDesignStats();
+  rcsNoseL.position.y = rcsNoseR.position.y = stage3.userData.height - 0.4;
+  state = freshState();
+  clearDebris();
+  clearSmoke();
+  explosions.forEach(ex=>{ scene.remove(ex.light); scene.remove(ex.core); ex.frags.forEach(fr=>scene.remove(fr.mesh)); });
+  explosions = [];
+  if(satellite){ scene.remove(satellite); satellite=null; satelliteVel=null; }
+
+  rocket.remove(payload); rocket.remove(crewPayload);
+  [stage1, stage2, stage3].forEach(seg=>{ if(seg.parent!==rocket) rocket.add(seg); });
+  rocket.add(activePayload());
+  payload.add(fairingL); payload.add(fairingR); payload.add(satelliteMesh);
+  fairingL.position.set(0,0,0); fairingL.rotation.set(0,0,0);
+  fairingR.position.set(0,0,0); fairingR.rotation.set(0,0,0);
+  satelliteMesh.position.set(0,1.6,0); satelliteMesh.rotation.set(0,0,0);
+  satelliteMesh.visible = false;
+  crewPayload.add(lesTower);
+  lesTower.position.set(0,LES_Y,0); lesTower.rotation.set(0,0,0);
+  restackRocket();
+  rocket.position.set(0,0,0);
+  rocket.rotation.set(0,0,0);
+  landerCraft.rotation.set(0,0,0);
+  capsuleCraft.rotation.set(0,0,0);
+  parachute.visible = false;
+  plasma.visible = false;
+  landerFlame.visible = false;
+  applySceneLook();
+
+  flame1.visible=false; flame2.visible=false; flame3.visible=false;
+  [rcsNoseL,rcsNoseR,rcsTailL,rcsTailR,landerPuffL,landerPuffR,capsulePuffL,capsulePuffR].forEach(p=>p.visible=false);
+  engineLight.intensity=0;
+  landerLight.intensity=0;
+  userZoom = 0;
+  snapCamera();
+  document.getElementById('btn-launch').textContent='점화';
+  document.getElementById('missionname').textContent = DESIGNS[designKey].name+'-1 · '+(missionMode==='manned' ? '유인 달 착륙 임무' : '위성 배치 임무');
+  lastStepsKey = '';
+  clearCenterMsg();
+  setStatus('대기 중','');
+}
+
+document.getElementById('btn-launch').addEventListener('click', handleIgnitionKey);
+document.getElementById('btn-stage').addEventListener('click', tryStageSep);
+document.getElementById('btn-meco').addEventListener('click', tryEngineCutoff);
+document.getElementById('btn-retro').addEventListener('click', toggleRetro);
+document.getElementById('btn-deploy').addEventListener('click', tryContextAction);
+document.getElementById('btn-reset').addEventListener('click', resetSim);
+function renderSfxToggle(){
+  const b = document.getElementById('sfx-toggle');
+  b.textContent = sfxOn ? '엔진 효과음 켜짐' : '엔진 효과음 꺼짐';
+  b.classList.toggle('active', sfxOn);
+  b.setAttribute('aria-pressed', sfxOn);
+}
+renderSfxToggle();
+function renderQuality(){
+  const a = document.getElementById('btn-q-4k'), b = document.getElementById('btn-q-std');
+  a.classList.toggle('active', quality==='4k'); a.setAttribute('aria-pressed', quality==='4k');
+  b.classList.toggle('active', quality!=='4k'); b.setAttribute('aria-pressed', quality!=='4k');
+}
+function setQuality(q){
+  if(q===quality) return;
+  quality = q;
+  try{ localStorage.setItem(QUALITY_KEY, q); }catch(e){}
+  applyQuality();
+  scene.traverse(o=>{ if(o.material){ (Array.isArray(o.material) ? o.material : [o.material]).forEach(m=>m.needsUpdate = true); } }); // shadow on/off recompiles shaders
+  renderQuality();
+}
+renderQuality();
+document.getElementById('btn-q-4k').addEventListener('click', ()=>setQuality('4k'));
+document.getElementById('btn-q-std').addEventListener('click', ()=>setQuality('std'));
+document.getElementById('sfx-toggle').addEventListener('click', ()=>{
+  sfxOn = !sfxOn;
+  try{ localStorage.setItem(SFX_KEY, sfxOn ? 'on' : 'off'); }catch(e){}
+  if(sfxOn) ensureSfx();
+  renderSfxToggle();
+});
+document.getElementById('voice-select').addEventListener('change', e=>{
+  voiceChoice = e.target.value;
+  try{ localStorage.setItem(VOICE_KEY, voiceChoice); }catch(err){}
+  if(!hasSpeech) return;
+  speechSynthesis.cancel();
+  if(voiceChoice!=='off'){ audio(); callout('Launch control, radio check.'); }
+});
+document.getElementById('btn-mode-un').addEventListener('click', ()=>setMode('unmanned'));
+document.getElementById('btn-mode-man').addEventListener('click', ()=>setMode('manned'));
+document.querySelectorAll('.design-btn[data-design]').forEach(b=>b.addEventListener('click', ()=>setDesign(b.dataset.design)));
+
+/* ---------- SIM STEP ---------- */
+// warp > 1 only during reentry: trajectory runs fast, but attitude is integrated in real time
+// so the RCS still feels the same under the player's fingers.
+function currentWarp(){
+  if(state.scene==='reentry' && state.phase==='reentry') return (state.chute==='open' ? (state.alt>400 ? 25 : state.alt>80 ? 6 : 1) : 4);
+  return 1;
+}
+function step(dt, warp){
+  dt = Math.min(dt, 0.05);
+  const dtReal = dt/(warp||1);
+  state.t += dt;
+
+  if(state.phase==='countdown'){
+    state.countdown -= dt;
+    const cd = Math.ceil(state.countdown);
+    if(cd>=1 && cd<=10 && cd!==state.lastSpokenCount){
+      speak(COUNT_WORDS[cd]);
+      state.lastSpokenCount = cd;
+    }
+    if(state.countdown<=0){
+      state.phase='flight';
+      state.liftedOff = true;
+      state.liftoffT = state.t;
+      state.throttle = 1;
+      speak('Liftoff. We have liftoff.');
+      sfxShot('ignite');
+      document.getElementById('btn-launch').textContent='비행 중';
+      setStatus('리프트오프','warn');
+    }
+    if(state.countdown<=1.2){
+      const spool = Math.max(0, 1-state.countdown/1.2);
+      flame1.visible = spool>0.05;
+      flame1.scale.set(4.5*0.5*spool,9*0.35*spool,4.5*0.5*spool);
+      engineLight.intensity = 1.5*spool;
+    }
+  }
+
+  const rho = airDensity(state.alt);
+  const airFrac = rho/1.225;
+
+  // wind: a slowly wandering base breeze plus occasional sharp gusts — only where there is air
+  if(airFrac>0){
+    state.windTimer -= dt;
+    if(state.windTimer<=0){
+      state.windTarget = (Math.random()*2-1)*11;
+      state.windTimer = 3+Math.random()*5;
+    }
+    state.windX += (state.windTarget-state.windX)*Math.min(1,dt*0.6);
+    if(Math.random() < dt*0.12*Math.max(0.2,airFrac)){
+      state.windX += (Math.random()*2-1)*16;
+      state.gustFlash = 0.5;
+    }
+  } else {
+    state.windX = 0;
+  }
+  state.gustFlash = Math.max(0, state.gustFlash-dtReal);
+  const windEff = state.windX*airFrac;
+
+  // throttle control
+  // W while the engine is cut off relights it, so a coasting stage can still do a retro-burn
+  const throttleRate = 0.9;
+  const throttleUp = keys['KeyW']||keys['ArrowUp'];
+  if(throttleUp && canReignite()) reignite(0);
+  const throttleable = (state.phase==='flight'||state.phase==='coast'||state.phase==='descending') && !state.engineCutoff;
+  if(throttleable){
+    if(throttleUp) state.throttle = Math.min(1, state.throttle + throttleRate*dtReal);
+    if(keys['KeyS']||keys['ArrowDown']) state.throttle = Math.max(0, state.throttle - throttleRate*dtReal);
+  }
+
+  // RCS attitude control — cold-gas jets impart torque, not an instant angle; the vessel carries rotational inertia
+  const RCS_TORQUE = 0.85;
+  const AERO_DAMPING = 3.2;
+  const attitudeLive = state.phase==='flight'||state.phase==='coast'||state.phase==='descending'||state.phase==='reentry';
+  let rInput = 0;
+  if(attitudeLive){
+    if(keys['KeyD']||keys['ArrowRight']) rInput = 1;
+    if(keys['KeyA']||keys['ArrowLeft']) rInput = -1;
+  }
+  if(rInput!==0) state.retroHold = false; // manual stick input takes over from the autopilot
+  state.rcsInput = rInput;
+  if(state.liftedOff && attitudeLive){
+    const torqueAuthority = Math.min(0.8, RCS_TORQUE * (18000/currentMass()));
+    state.angularVel += rInput*torqueAuthority*dtReal;
+    if(state.retroHold){
+      // retrograde hold: PD loop fires the same RCS jets to point the engine against the velocity
+      // vector (upright once nearly stopped). Same target keeps a reentry capsule's shield on the airflow.
+      const target = retroTarget();
+      const err = wrapAngle(target - state.angle);
+      const want = 3.0*err - 2.2*state.angularVel;
+      const cmd = Math.max(-torqueAuthority, Math.min(torqueAuthority, want));
+      state.angularVel += cmd*dtReal;
+      if(Math.abs(cmd) > torqueAuthority*0.15) state.rcsInput = Math.sign(cmd);
+    }
+    state.angularVel += (Math.random()*2-1)*0.35*airFrac*dtReal; // gust buffeting nudges attitude too
+    if(state.scene==='launch'){
+      // finned launch vehicle weathercocks into the airflow, so it doesn't wander into high angles of attack on its own
+      const q = 0.5*rho*((state.vx-windEff)**2 + state.vy*state.vy);
+      if(Math.hypot(state.vx, state.vy) > 40){
+        const aoa = wrapAngle(state.angle - Math.atan2(state.vx-windEff, state.vy));
+        state.angularVel += -0.25*Math.min(1, q/20000)*Math.sin(aoa)*dtReal;
+      }
+    }
+    if(state.scene==='reentry' && state.chute!=='open'){
+      // blunt capsule is weathervane-stable: dynamic pressure pulls the shield back toward the airflow
+      const q = 0.5*rho*(state.vx*state.vx+state.vy*state.vy);
+      const mis = wrapAngle(state.angle - Math.atan2(-state.vx, -state.vy));
+      state.angularVel += -0.8*Math.min(1, q/5000)*Math.sin(mis)*dtReal;
+    }
+    state.angularVel *= Math.max(0, 1 - AERO_DAMPING*airFrac*dtReal); // air only damps rotation inside the atmosphere
+    state.angle = wrapAngle(state.angle + state.angularVel*dtReal);
+  }
+
+  if(state.scene==='launch' && (state.phase==='flight'||state.phase==='coast')){
+    const mass = currentMass();
+    const thrustMax = currentThrust();
+    const thrust = thrustMax*state.throttle;
+
+    if(state.stageIndex===1 && state.fuel1>0 && state.throttle>0){
+      state.fuel1 = Math.max(0, state.fuel1 - CFG.stage1.burnRateMax*state.throttle*dt);
+    } else if(state.stageIndex===2 && state.fuel2>0 && state.throttle>0){
+      state.fuel2 = Math.max(0, state.fuel2 - CFG.stage2.burnRateMax*state.throttle*dt);
+    } else if(state.stageIndex===3 && state.fuel3>0 && state.throttle>0 && !state.engineCutoff){
+      state.fuel3 = Math.max(0, state.fuel3 - CFG.stage3.burnRateMax*state.throttle*dt);
+    }
+
+    const g = gravityAt(state.alt);
+    const vxRel = state.vx - windEff;
+    const speed = Math.hypot(vxRel, state.vy);
+    const dragForce = 0.5*rho*speed*speed*2.6;
+    const dragAx = speed>0.01 ? -dragForce*(vxRel/speed)/mass : 0;
+    const dragAy = speed>0.01 ? -dragForce*(state.vy/speed)/mass : 0;
+
+    const ax = (thrust/mass)*Math.sin(state.angle) + dragAx;
+    const ay = (thrust/mass)*Math.cos(state.angle) - g + dragAy;
+
+    state.vx += ax*dt;
+    state.vy += ay*dt;
+    state.alt += state.vy*dt;
+    state.range += state.vx*dt;
+
+    state.gforce = Math.hypot(ax, ay+g)/G0;
+    state.peakAlt = Math.max(state.peakAlt, state.alt);
+
+    if(!state.fairingJettisoned && state.alt>=FAIRING_JETTISON_ALT) jettisonFairing();
+    if(state.alt>150) callOnce('tower', 'Tower cleared.');
+    if(state.alt>11000) callOnce('maxq', 'Vehicle is passing through max Q.');
+    // structural load = dynamic pressure × sin(angle of attack). Turning hard near max Q folds the vehicle.
+    state.q = 0.5*rho*speed*speed;
+    state.mach = speed/soundSpeed(state.alt);
+    const aoa = speed>40 ? Math.abs(wrapAngle(state.angle - Math.atan2(vxRel, state.vy))) : 0;
+    state.aeroLoad = state.q*Math.sin(Math.min(aoa, Math.PI/2));
+    if(state.aeroLoad > AERO_WARN && !state.loadWarn){ state.loadWarn = true; setStatus('구조 하중 경고 — 받음각을 줄이세요','bad'); callout('Caution. High aero loads.'); }
+    if(state.aeroLoad < AERO_WARN*0.8 && state.loadWarn){ state.loadWarn = false; setStatus('동력 비행 중','warn'); }
+    state.stress = state.aeroLoad > AERO_LIMIT ? state.stress + dt*(state.aeroLoad-AERO_LIMIT)/4000 : Math.max(0, state.stress - dt*0.5);
+    if(state.stress > 0.6 && state.phase!=='crash'){
+      crashOut(speed, '기체 분해 — 공력 하중 초과', '동압 '+(state.q/1000).toFixed(1)+' kPa · 받음각 '+(aoa*180/Math.PI).toFixed(0)+'° · 최대 동압 구간에서는 진행 방향을 유지하세요', 'Vehicle breakup. We have lost the vehicle.');
+      return;
+    }
+    if(state.alt>=KARMAN) callOnce('karman', 'Crossing the Karman line. We are in space.');
+    if(state.stageIndex===1 && state.fuel1<=0) callOnce('beco', 'Booster engine cutoff. Standing by for staging.');
+    if(state.stageIndex===2 && state.fuel2<=0) callOnce('seco', 'Second stage engine cutoff. Standing by for staging.');
+
+    if(state.alt<=0){
+      state.alt = 0;
+      const impact = Math.hypot(state.vx, state.vy);
+      if(impact < EARTH_SAFE_SPEED){
+        state.phase='landed';
+        centerMsg('착륙 성공', '연착륙 · '+impact.toFixed(1)+' M/S', 'good');
+        setStatus('착륙 완료','go');
+      } else {
+        crashOut(impact);
+      }
+      state.vx=0; state.vy=0;
+    }
+
+    if(state.vy>0){
+      state.apo = state.alt + (state.vy*state.vy)/(2*gravityAt(state.alt));
+    } else {
+      state.apo = Math.max(state.apo, state.alt);
+    }
+
+    if(state.phase==='flight' && thrustMax===0){
+      state.phase='coast';
+      setStatus(state.engineCutoff?'엔진 정지 — 관성 비행 중':'관성 비행 중','warn');
+    }
+    if(state.phase==='coast' && thrust>0 && state.throttle>0 && currentThrust()>0){
+      state.phase='flight';
+      setStatus('동력 비행 중','warn');
+    }
+
+    // once past apogee with the engine dark, gravity wins and the vessel begins to fall back
+    if(state.phase==='coast' && state.vy<0 && state.alt<state.peakAlt-5){
+      state.phase='descending';
+      setStatus(state.alt>=KARMAN?'대기권 재진입 — 하강 중':'하강 중','warn');
+    }
+
+    if(canStageSep() && state.phase==='flight') setStatus(state.stageIndex+'단 연료 소진 — 분리 가능','warn');
+  }
+  else if(state.scene==='launch' && state.phase==='descending'){
+    if(state.throttle>0 && currentThrust()>0){
+      state.phase='flight';
+    } else {
+      const mass = currentMass();
+      const g = gravityAt(state.alt);
+      const vxRel = state.vx - windEff;
+      const speed = Math.hypot(vxRel, state.vy);
+      const dragForce = 0.5*rho*speed*speed*2.6;
+      const dragAx = speed>0.01 ? -dragForce*(vxRel/speed)/mass : 0;
+      const dragAy = speed>0.01 ? -dragForce*(state.vy/speed)/mass : 0;
+      state.vx += dragAx*dt;
+      state.vy += (-g+dragAy)*dt;
+      state.alt += state.vy*dt;
+      state.range += state.vx*dt;
+      state.gforce = Math.hypot(dragAx, dragAy+g)/G0;
+      if(state.alt<=0){
+        state.alt=0;
+        const impact = Math.hypot(state.vx, state.vy);
+        if(impact<EARTH_SAFE_SPEED){ state.phase='landed'; centerMsg('착륙 성공','연착륙 · '+impact.toFixed(1)+' M/S','good'); setStatus('착륙 완료','go'); }
+        else { crashOut(impact); }
+        state.vx=0; state.vy=0;
+      }
+    }
+  }
+  else if(state.scene==='lunar' && state.phase==='flight'){
+    stepLunar(dt);
+  }
+  else if(state.scene==='reentry' && state.phase==='reentry'){
+    stepReentry(dt, rho, windEff);
+  }
+
+  // falling debris — dropped stages, fairing halves, escape tower (simple ballistic, purely visual)
+  for(let i=debris.length-1;i>=0;i--){
+    const d = debris[i];
+    d.vy -= gravityAt(d.alt)*dt;
+    d.alt += d.vy*dt;
+    d.range += d.vx*dt;
+    d.z += d.vz*dt;
+    d.mesh.rotation.z += d.spin*dt;
+    d.mesh.position.set(d.range, Math.max(0,d.alt), d.z);
+    if(d.alt<=0 && d.vy<0){ d.vy=0; d.vx=0; d.vz=0; d.spin*=0.9; }
+  }
+
+  // deployed satellite — free orbit drift on success, ballistic reentry on a failed deploy
+  if(satellite && satelliteVel){
+    if(satelliteVel.orbit){
+      satelliteVel.alt += satelliteVel.vy*dt;
+      satelliteVel.range += satelliteVel.vx*dt;
+    } else {
+      satelliteVel.vy -= gravityAt(satelliteVel.alt)*dt;
+      satelliteVel.alt += satelliteVel.vy*dt;
+      satelliteVel.range += satelliteVel.vx*dt;
+      if(satelliteVel.alt<=0){ satelliteVel.alt=0; satelliteVel.vy=0; satelliteVel.vx=0; }
+    }
+    satelliteVel.vz *= (1-Math.min(1,dt*0.6));
+    satelliteVel.z += satelliteVel.vz*dt;
+    satellite.position.set(satelliteVel.range, satelliteVel.alt, satelliteVel.z);
+    satellite.rotation.y += dt*0.5;
+  }
+
+  // explosions — expanding fireball + tumbling fragments, cleaned up once burned out
+  for(let i=explosions.length-1;i>=0;i--){
+    const ex = explosions[i];
+    ex.t += dt;
+    const p = Math.min(1, ex.t/ex.life);
+    ex.core.scale.setScalar(3.5+p*20);
+    ex.core.material.opacity = Math.max(0,(1-p*p)*0.95);
+    ex.light.intensity = 14*(1-p);
+    ex.frags.forEach(fr=>{
+      fr.vy -= G0*dt*2;
+      fr.range += fr.vx*dt;
+      fr.alt += fr.vy*dt;
+      fr.z += fr.vz*dt;
+      fr.mesh.position.set(fr.range, Math.max(0,fr.alt), fr.z);
+      fr.mesh.rotation.x += fr.spin*dt;
+      fr.mesh.rotation.z += fr.spin*dt*0.7;
+    });
+    if(ex.t>=ex.life){
+      scene.remove(ex.light); scene.remove(ex.core);
+      ex.frags.forEach(fr=>scene.remove(fr.mesh));
+      explosions.splice(i,1);
+    }
+  }
+}
+
+/* ---------- RENDER / VISUAL UPDATE ---------- */
+let lastTime = performance.now();
+const camDist = 40, camHeight = 14;
+let smoothDist = camDist, smoothHeight = camHeight;
+
+// manual zoom — scroll wheel nudges distance on top of the automatic altitude zoom
+let userZoom = 0;
+const USER_ZOOM_MIN = -25, USER_ZOOM_MAX = 150;
+window.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const d = Math.max(-60, Math.min(60, e.deltaY)); // clamp one tick so a single scroll can't fling the zoom to its limit
+  userZoom = Math.max(USER_ZOOM_MIN, Math.min(USER_ZOOM_MAX, userZoom + d*0.12));
+}, {passive:false});
+
+// chase cam framing per craft: the anchor sits on the vessel, only the zoom eases;
+// zoom-out saturates (1-e^-x) so the craft settles into a stable frame at altitude.
+function camTargets(){
+  const zoomIn = 1-Math.exp(-state.alt/7000);
+  let base, extra, hBase, anchor;
+  if(state.scene==='lunar'){
+    base = 22; extra = 30; hBase = 6; anchor = 2.2;
+  } else if(state.scene==='reentry'){
+    const chute = state.chute==='open';
+    base = chute ? 34 : 18; extra = 26; hBase = chute ? 9 : 5; anchor = chute ? 6 : 1.5;
+  } else {
+    let h = 0;
+    [stage1, stage2, stage3, payload, crewPayload].forEach(seg=>{ if(seg.parent===rocket) h += seg.userData.height; });
+    base = camDist; extra = 150; hBase = camHeight; anchor = Math.max(2, h*0.42);
+  }
+  return {
+    dist: Math.max(12, base + extra*zoomIn + userZoom),
+    height: hBase + extra*0.4*zoomIn + userZoom*0.4,
+    anchor,
+  };
+}
+function snapCamera(){
+  const c = camTargets();
+  smoothDist = c.dist;
+  smoothHeight = c.height;
+}
+
+function updateVisuals(dt){
+  emitFlightSmoke(dt);
+  updateSmoke(dt);
+  const sinceLift = state.liftedOff ? state.t - state.liftoffT : 0;
+  const frostA = state.liftedOff ? 0.85*Math.max(0, 1 - sinceLift/20) : 0.85;
+  for(const m of frostMats) m.opacity = frostA;
+  const craft = activeCraft();
+  craft.position.set(state.range, state.alt, 0);
+  craft.rotation.z = -state.angle;
+
+  const launching = state.scene==='launch' && state.phase!=='prelaunch' && state.phase!=='countdown';
+  const thrusting1 = launching && state.stageIndex===1 && state.throttle>0 && state.fuel1>0;
+  const thrusting2 = launching && state.stageIndex===2 && state.throttle>0 && state.fuel2>0;
+  const thrusting3 = launching && state.stageIndex===3 && state.throttle>0 && state.fuel3>0 && !state.engineCutoff;
+  if(state.phase!=='countdown'){
+    flame1.visible = thrusting1;
+    engineLight.intensity = (thrusting1||thrusting2||thrusting3) ? 2.5*state.throttle : 0;
+  }
+  flame2.visible = thrusting2;
+  flame3.visible = thrusting3;
+  const tk = state.throttle;
+  if(thrusting1) flame1.scale.set(4.5*(0.6+0.4*tk), 9*(0.5+0.5*tk), 4.5*(0.6+0.4*tk));
+  if(thrusting2) flame2.scale.set(2.6*(0.6+0.4*tk), 5.5*(0.5+0.5*tk), 2.6*(0.6+0.4*tk));
+  if(thrusting3) flame3.scale.set(1.4*(0.6+0.4*tk), 2.8*(0.5+0.5*tk), 1.4*(0.6+0.4*tk));
+  // with no air to hold it in, the plume balloons out wide — an under-expanded nozzle at altitude
+  const vac = 1 + 1.8*(1 - Math.sqrt(airDensity(state.alt)/1.225));
+  for(const f of [flame1, flame2, flame3]) if(f.visible && state.phase!=='countdown'){ f.scale.x *= vac; f.scale.z *= vac; f.scale.y *= 1 + 0.5*(vac-1); }
+  for(const f of stage1.userData.extraFlames){
+    f.visible = flame1.visible;
+    if(f.visible) f.scale.set(flame1.scale.x*f.userData.k, flame1.scale.y*f.userData.k, 1);
+  }
+
+  const landerBurning = state.scene==='lunar' && state.phase==='flight' && tk>0 && state.landerFuel>0;
+  landerFlame.visible = landerBurning;
+  if(landerBurning) landerFlame.scale.set(1.3*(0.6+0.4*tk), 2.8*(0.5+0.5*tk), 1);
+  landerLight.intensity = landerBurning ? 1.8*tk : 0;
+
+  // RCS puffs — firing side depends on which way attitude is being commanded
+  const rcsActive = state.liftedOff && state.rcsInput!==0;
+  const pos = rcsActive && state.rcsInput>0, neg = rcsActive && state.rcsInput<0;
+  rcsNoseL.visible = pos; rcsNoseR.visible = neg; rcsTailL.visible = neg; rcsTailR.visible = pos;
+  landerPuffL.visible = pos; landerPuffR.visible = neg;
+  capsulePuffL.visible = pos && state.chute!=='open'; capsulePuffR.visible = neg && state.chute!=='open';
+
+  // reentry: plasma sheath scales with heating, canopy inflates as it opens
+  const heatS = Math.min(1, state.heatRate/6e8);
+  if(state.softFlash>0) state.softFlash = Math.max(0, state.softFlash - dt);
+  softFlame.visible = state.scene==='reentry' && state.softFlash>0;
+  if(softFlame.visible){ const k = state.softFlash/0.45; softFlame.scale.set(3.5+3*k, 2.5+4*k, 1); }
+  plasma.visible = state.scene==='reentry' && state.heatRate>2e7 && state.phase==='reentry';
+  if(plasma.visible){
+    plasma.scale.set(3+6*heatS, 3+6*heatS, 1);
+    plasma.material.opacity = 0.35 + 0.6*heatS;
+  }
+  parachute.visible = state.scene==='reentry' && state.chute==='open';
+  if(parachute.visible){
+    const s = Math.min(1, 0.2 + state.chuteT/6);
+    parachute.scale.set(s, 0.6+0.4*s, s);
+  }
+
+  const c = camTargets();
+  const zoomEase = 1-Math.pow(0.001, dt);
+  smoothDist += (c.dist-smoothDist)*zoomEase;
+  smoothHeight += (c.height-smoothHeight)*zoomEase;
+  camera.position.set(state.range - smoothDist*0.28, state.alt+smoothHeight, smoothDist*0.92);
+  camera.lookAt(state.range, state.alt + c.anchor, 0);
+
+  ground.position.x = Math.round(state.range/GROUND_TILE)*GROUND_TILE;
+  keyLight.target.position.set(state.range, Math.max(0, state.alt), 0);
+  keyLight.position.copy(keyLight.target.position).addScaledVector(KEY_DIR, 600);
+  stars.position.copy(camera.position);
+  skyDome.position.copy(camera.position);
+
+  if(state.scene==='lunar'){
+    scene.background = SKY_MOON;
+    skyUniforms.topColor.value.copy(SKY_MOON);
+    skyUniforms.horizonColor.value.copy(SKY_MOON);
+    skyUniforms.groundColor.value.copy(SKY_MOON);
+    skyUniforms.sunGlow.value = 0.8;
+    scene.fog.density = 0;
+    stars.material.opacity = 1;
+    sun.intensity = 0.9; keyLight.intensity = 1.1; skyFill.intensity = 0.12;
+    earthSky.position.set(camera.position.x - 9000, camera.position.y + 6500, camera.position.z - 16000);
+    earthSky.rotation.y += dt*0.02;
+    moonHills.position.x = camera.position.x;
+  } else {
+    const f1 = Math.min(1, state.alt/30000);
+    const f2 = Math.min(1, Math.max(0,(state.alt-30000)/70000));
+    skyUniforms.topColor.value.copy(SKY_TOP[0]).lerp(SKY_TOP[1], f1).lerp(SKY_TOP[2], f2);
+    const hor = skyUniforms.horizonColor.value.copy(SKY_HOR[0]).lerp(SKY_HOR[1], f1).lerp(SKY_HOR[2], f2);
+    skyUniforms.groundColor.value.copy(hor);
+    skyUniforms.sunGlow.value = 1.0;
+    scene.background = hor;
+    scene.fog.color.copy(hor);
+    scene.fog.density = FOG_BASE*Math.max(0.04, 1-state.alt/12000); // clears fast with height so the coast shows from altitude
+    stars.material.opacity = Math.min(1, Math.max(0,(state.alt-15000)/60000));
+    sun.intensity = 0.8 - f2*0.3; keyLight.intensity = 1.05; skyFill.intensity = 0.55*(1-f2*0.8);
+    const cx = camera.position.x;
+    for(const c of clouds){
+      const dxw = ((c.bx - cx) % CLOUD_BAND + CLOUD_BAND) % CLOUD_BAND - CLOUD_BAND/2;
+      c.s.position.set(cx + dxw, c.alt, c.z);
+    }
+  }
+}
+
+/* mission checklist — a real sequence, so it is numbered */
+function missionSteps(){
+  const s = state;
+  if(missionMode==='unmanned') return [
+    ['발사 · 3단 도달', s.stageIndex===3],
+    ['페어링 분리 (55 KM)', s.fairingJettisoned],
+    ['3단 엔진 정지', s.mecoDone],
+    ['위성 분리 (100 KM+)', s.phase==='success'],
+  ];
+  const past = s.scene!=='launch';
+  return [
+    ['발사 · 3단 도달', s.stageIndex===3],
+    ['탈출탑 분리 (55 KM)', s.fairingJettisoned],
+    ['3단 엔진 정지', s.mecoDone],
+    ['착륙선 분리 (100 KM+)', past],
+    ['달 착륙 ('+LUNAR_SAFE_SPEED+' M/S 이하)', s.lunarLanded],
+    ['대기권 재진입', s.scene==='reentry' && (s.chute==='open' || s.phase==='success')],
+    ['낙하산 (8 KM · 300 M/S 이하) · 귀환', s.scene==='reentry' && s.phase==='success'],
+  ];
+}
+let lastStepsKey = '';
+function renderSteps(){
+  const steps = missionSteps();
+  const cur = steps.findIndex(x=>!x[1]);
+  const failed = state.phase==='crash' || state.phase==='failed';
+  const key = missionMode + steps.map(x=>x[1]?1:0).join('') + cur + failed;
+  if(key===lastStepsKey) return;
+  lastStepsKey = key;
+  document.getElementById('mission-steps').innerHTML = steps.map((x,i)=>{
+    const isCur = i===cur;
+    const cls = x[1] ? 'done' : isCur ? (failed ? 'fail' : 'current') : '';
+    const n = x[1] ? '✓' : (isCur && failed ? '✕' : String(i+1));
+    return '<li class="'+cls+'"><span class="n">'+n+'</span><span>'+x[0]+'</span></li>';
+  }).join('');
+}
+
+function updateHUD(){
+  document.getElementById('v-alt').innerHTML = state.alt.toFixed(0)+'<span class="tele-unit">m</span>';
+  const totalV = Math.hypot(state.vx,state.vy);
+  document.getElementById('v-vel').innerHTML = totalV.toFixed(1)+'<span class="tele-unit">m/s</span>';
+  if(state.scene==='lunar'){
+    document.getElementById('apo-label').textContent = '수직 속도';
+    document.getElementById('v-apo').innerHTML = state.vy.toFixed(1)+'<span class="tele-unit">m/s</span>';
+  } else {
+    document.getElementById('apo-label').textContent = '정점 고도';
+    document.getElementById('v-apo').innerHTML = (state.apo>0.5? state.apo.toFixed(0):'—')+'<span class="tele-unit">m</span>';
+  }
+  document.getElementById('v-range').innerHTML = state.range.toFixed(0)+'<span class="tele-unit">m</span>';
+  document.getElementById('v-g').innerHTML = state.gforce.toFixed(1)+'<span class="tele-unit">g</span>';
+  const mq = document.getElementById('v-mq');
+  if(state.scene==='lunar'){ mq.textContent = '— · 진공'; mq.style.color = ''; }
+  else {
+    mq.innerHTML = 'M '+state.mach.toFixed(2)+' · '+(state.q/1000).toFixed(1)+'<span class="tele-unit">kPa</span>';
+    mq.style.color = state.aeroLoad>AERO_LIMIT ? 'var(--danger)' : state.aeroLoad>AERO_WARN ? 'var(--warn)' : '';
+  }
+  const windEl = document.getElementById('v-wind');
+  if(state.scene==='reentry'){
+    document.getElementById('wind-label').textContent = '낙하산';
+    const reason = state.chute==='stowed' && !chuteSafe() ? (state.alt>CHUTE_MAX_ALT ? '고도 초과' : '속도 초과') : '';
+    const txt = state.chute==='open' ? (state.softFired ? '역추진 점화' : isOcean(state.range,0) ? '전개됨 · 착수' : '전개됨 · 역추진 대기') : state.chute==='torn' ? '파손' : reason || '전개 가능';
+    windEl.textContent = txt;
+    windEl.style.color = state.chute==='torn' ? 'var(--danger)' : (reason ? 'var(--warn)' : 'var(--good)');
+  } else {
+    document.getElementById('wind-label').textContent = '측풍';
+    windEl.style.color = '';
+    windEl.innerHTML = state.windX.toFixed(1)+'<span class="tele-unit">m/s</span>';
+  }
+  document.getElementById('telemetry').classList.toggle('gust', state.gustFlash>0);
+
+  document.getElementById('tele-title').textContent =
+    state.scene==='lunar' ? '텔레메트리 · 착륙선' : state.scene==='reentry' ? '텔레메트리 · 귀환선' : '텔레메트리 · '+DESIGNS[designKey].name;
+
+  let fuelFrac, fuelLabel;
+  if(state.scene==='lunar'){ fuelFrac = state.landerFuel/LANDER.fuel; fuelLabel = '연료 — 착륙선'; }
+  else if(state.scene==='reentry'){ fuelFrac = state.shield; fuelLabel = '열차폐 — 귀환선'; }
+  else {
+    fuelFrac = state.stageIndex===1 ? state.fuel1/CFG.stage1.fuelMass
+             : state.stageIndex===2 ? state.fuel2/CFG.stage2.fuelMass
+             : state.fuel3/CFG.stage3.fuelMass;
+    fuelLabel = '연료 — '+state.stageIndex+'단';
+  }
+  document.getElementById('v-fuel-label').textContent = fuelLabel;
+  document.getElementById('v-fuel').innerHTML = Math.round(fuelFrac*100)+'<span class="tele-unit">%</span>';
+  const fuelFill = document.getElementById('fuel-fill');
+  fuelFill.style.width = (fuelFrac*100)+'%';
+  fuelFill.style.background = fuelFrac<0.2 ? 'linear-gradient(90deg,#a33,var(--danger))' : 'linear-gradient(90deg,#2a7,var(--good))';
+
+  document.getElementById('throttle-fill').style.width = (state.throttle*100)+'%';
+  document.getElementById('throttle-val').textContent = Math.round(state.throttle*100)+'%';
+
+  // attitude gauge: absolute tilt, or — during reentry — how far the shield is off the airflow
+  const reentry = state.scene==='reentry';
+  const attDeg = reentry ? (state.chute==='open' ? 0 : state.misalign*180/Math.PI) : state.angle*180/Math.PI;
+  document.getElementById('att-label').textContent = reentry ? '열차폐 정렬 오차' : '자세 제어(RCS)';
+  document.getElementById('gimbal-val').textContent = (attDeg>=0?'+':'')+attDeg.toFixed(0)+'°';
+  const pct = 50 + (attDeg/180)*50;
+  const marker = document.getElementById('gimbal-marker');
+  marker.style.left = Math.max(1,Math.min(97,pct))+'%';
+  marker.classList.toggle('bad', (reentry && Math.abs(attDeg)>25) || (state.scene==='lunar' && Math.abs(attDeg)>LUNAR_SAFE_TILT && state.alt<60));
+
+  // buttons
+  document.getElementById('btn-launch').disabled = state.phase!=='prelaunch';
+  document.getElementById('btn-stage').disabled = !canStageSep();
+  const mecoBtn = document.getElementById('btn-meco');
+  const relight = canReignite();
+  mecoBtn.disabled = !(relight || canEngineCutoff());
+  const mecoLabel = relight ? '엔진 재점화' : '엔진 정지';
+  if(mecoBtn.textContent!==mecoLabel) mecoBtn.textContent = mecoLabel;
+  if(!canRetro()) state.retroHold = false;
+  const retroBtn = document.getElementById('btn-retro');
+  retroBtn.disabled = !canRetro();
+  retroBtn.classList.toggle('on', state.retroHold);
+  retroBtn.setAttribute('aria-pressed', state.retroHold);
+  const retroLabel = state.retroHold ? '역추진 자세 ON' : '역추진 자세';
+  if(retroBtn.textContent!==retroLabel) retroBtn.textContent = retroLabel;
+  const ctx = contextAction();
+  const deployBtn = document.getElementById('btn-deploy');
+  deployBtn.disabled = !ctx.enabled;
+  if(deployBtn.textContent!==ctx.label) deployBtn.textContent = ctx.label;
+  document.getElementById('hint-v').textContent = ctx.label;
+
+  const locked = state.phase!=='prelaunch';
+  const unBtn = document.getElementById('btn-mode-un'), manBtn = document.getElementById('btn-mode-man');
+  unBtn.disabled = manBtn.disabled = locked;
+  unBtn.classList.toggle('active', missionMode==='unmanned');
+  manBtn.classList.toggle('active', missionMode==='manned');
+  unBtn.setAttribute('aria-pressed', missionMode==='unmanned');
+  manBtn.setAttribute('aria-pressed', missionMode==='manned');
+  renderSteps();
+  const D = DESIGNS[designKey];
+  document.querySelectorAll('.design-btn[data-design]').forEach(b=>{
+    const on = b.dataset.design===designKey;
+    b.disabled = locked;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on);
+  });
+  const specKey = designKey;
+  if(document.getElementById('design-spec').dataset.k!==specKey){
+    const m = D.mult;
+    const spec = document.getElementById('design-spec');
+    spec.dataset.k = specKey;
+    spec.innerHTML = '<b>'+D.tagline+'</b><br>추력 ×'+m.t.toFixed(2)+' · 연료 ×'+m.f.toFixed(2)+' · 무게 ×'+m.d.toFixed(2);
+  }
+
+  const warp = currentWarp();
+  const warpEl = document.getElementById('warp');
+  warpEl.hidden = warp===1;
+  if(warp>1) warpEl.textContent = '시간 가속 ×'+warp;
+
+  if(state.phase==='countdown'){
+    const cd = Math.max(0,state.countdown);
+    document.getElementById('clockval').textContent = 'T− 00:'+cd.toFixed(1).padStart(4,'0');
+  } else if(state.phase==='prelaunch'){
+    document.getElementById('clockval').textContent = 'T− 00:10.0';
+  } else {
+    const t = state.t;
+    const m = Math.floor(t/60).toString().padStart(2,'0');
+    const s = (t%60).toFixed(1).padStart(4,'0');
+    document.getElementById('clockval').textContent = 'T+ '+m+':'+s;
+  }
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  const dt = (now-lastTime)/1000;
+  lastTime = now;
+  const frame = Math.min(dt, 0.05);
+  const warp = currentWarp();
+  let remain = frame*warp;
+  while(remain>1e-6){
+    const h = Math.min(0.05, remain);
+    step(h, warp);
+    remain -= h;
+    if(currentWarp()!==warp) break; // chute opened or touched down — don't fast-forward the aftermath
+  }
+  updateVisuals(Math.min(Math.max(dt,0.0001),0.1));
+  updateAudio();
+  updateHUD();
+  renderer.render(scene, camera);
+}
+
+resetSim();
+requestAnimationFrame(animate);
+
+})();
+</script>
+</body>
+</html>
