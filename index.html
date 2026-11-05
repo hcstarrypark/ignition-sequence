@@ -3034,7 +3034,7 @@ function updateHUD(){
   } else if(state.phase==='prelaunch'){
     document.getElementById('clockval').textContent = 'T− 00:10.0';
   } else {
-    const t = state.t;
+    const t = Math.max(0, state.t - state.liftoffT);   // mission elapsed time counts from liftoff, not from page load
     const m = Math.floor(t/60).toString().padStart(2,'0');
     const s = (t%60).toFixed(1).padStart(4,'0');
     document.getElementById('clockval').textContent = 'T+ '+m+':'+s;
